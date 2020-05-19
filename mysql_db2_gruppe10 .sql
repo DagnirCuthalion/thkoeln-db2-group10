@@ -1,5 +1,4 @@
 DROP TABLE kann_oeffnen;
-
 DROP TABLE berechtigung;
 DROP TABLE reservierung;
 DROP TABLE schadensmeldung;
@@ -8,7 +7,6 @@ DROP TABLE ausleihe;
 DROP TABLE transponder;
 DROP TABLE pfoertner;
 DROP TABLE person;
-
 DROP TABLE raumverantwortlicher;
 DROP TABLE labor;
 
@@ -62,7 +60,7 @@ person_person_id INTEGER (9),
 pfoertner_person_id INTEGER (9),
 ausgeliehen_von DATE NOT NULL,
 ausgeliehen_bis DATE NOT NULL,
-CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,pfoertner_person_id)
+CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,ausgeliehen_von)
 );
 
 CREATE TABLE berechtigung(
@@ -151,31 +149,74 @@ ALTER TABLE raumverantwortlicher
               FOREIGN KEY (labor_id)
                                 REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 ); 
-                                                
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_fk
               FOREIGN KEY (transponder_id,person_person_id,pfoertner_person_id)
                                 REFERENCES ausleihe(transponder_id,person_person_id,pfoertner_person_id) ON DELETE CASCADE
                                                 );
-                                                                                                
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_raum_fk
               FOREIGN KEY (raum_id)
                                 REFERENCES raum(raum_id) ON DELETE CASCADE
                                                 );  
-                                                
 ALTER TABLE person
         ADD ( CONSTRAINT gehoert_an_fk
               FOREIGN KEY (labor_id)
                                 REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 );                                                
 
-
-
+-- notification function
 
 -- fun1
+/*
+DROP PROCEDURE IF EXISTS fun_transponder_ausleihen;
+DELIMITER $$
+CREATE PROCEDURE fun_transponder_ausleihen (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9))
+BEGIN
+    IF (
+		SELECT count(*) 
+		FROM 
+        (	
+			(SELECT * FROM berechtigung b, kann_oeffnen k, raum r 
+			WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
+			AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id)
+			MINUS
+			(SELECT * FROM berechtigung b, kann_oeffnen k, raum r 
+			WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
+			AND k.raum_id = r.raum_id AND NOT k.transponder_id = p_transponder_id);
+		)
+	)
+        
+							
+	THEN
+    -- funktionsfähig
+		IF(SELECT t.funktionsfähigkeit FROM transponder t WHERE t.transponder_id=p_transponder_id) = 'funktionsfähig') THEN
+        -- ausgeliehen
+			IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL) THEN
+				-- berechtigender bestimmen
+                
+                -- alles in ausleihe einfügen
+                INSERT INTO ausleihe
+                VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp());
+			END IF;
+		END IF;
+	END IF;
+END $$
+DELIMITER ;
+*/
+    
 
 -- proc2
+DROP PROCEDURE IF EXISTS fun_transponder_zurueckgeben;
+DELIMITER $$
+CREATE PROCEDURE  fun_transponder_zurueckgeben (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9))
+BEGIN
+	UPDATE ausleihe a
+    SET a.ausgeliehen_bis = current_timestamp()
+    WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id 
+    AND a.ausgeliehen_von = (SELECT MAX(ausgeliehen_von) FROM ausleihe a WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id);
+END $$
+DELIMITER ;
 
 -- fun3
 
@@ -192,9 +233,9 @@ BEFORE DELETE
 ON berechtigung
 FOR EACH ROW
 BEGIN
-	DELETE FROM reservierung
-    WHERE person_id = old.person_id
-    AND current_timestamp() < reserviert_von;
+	DELETE FROM reservierung r
+    WHERE r.person_id = old.person_id
+    AND current_timestamp() < r.reserviert_von;
 END $$
 DELIMITER ;
 
@@ -205,12 +246,16 @@ AFTER INSERT
 ON raum
 FOR EACH ROW
 BEGIN
-	-- notify
+	SELECT r.raumverantwortlicher_id, r.vorname, r.nachname FROM raumverantwortlicher r, labor l
+    WHERE r.labor_id = l.labor_id
+    AND l.labor_id = new.labor_id;
+    -- TODO: notify
 END $$
 DELIMITER ;
 
-/*
 -- trigger5
+/*
+
 DELIMITER $$
 CREATE TRIGGER trg_delete_records
 BEFORE DELETE 
