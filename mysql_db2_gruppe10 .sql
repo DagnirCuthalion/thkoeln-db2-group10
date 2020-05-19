@@ -1,12 +1,14 @@
 DROP TABLE kann_oeffnen;
-DROP TABLE ausleihe;
+
 DROP TABLE berechtigung;
 DROP TABLE reservierung;
 DROP TABLE schadensmeldung;
 DROP TABLE raum;
+DROP TABLE ausleihe;
 DROP TABLE transponder;
 DROP TABLE pfoertner;
 DROP TABLE person;
+
 DROP TABLE raumverantwortlicher;
 DROP TABLE labor;
 
@@ -18,7 +20,6 @@ etage INTEGER(1),
 gebaeude VARCHAR(45),
 labor_id INTEGER (9)
 );
-
 
 CREATE TABLE kann_oeffnen(
 raum_id INTEGER (9),
@@ -156,8 +157,7 @@ ALTER TABLE schadensmeldung
               FOREIGN KEY (transponder_id,person_person_id,pfoertner_person_id)
                                 REFERENCES ausleihe(transponder_id,person_person_id,pfoertner_person_id) ON DELETE CASCADE
                                                 );
-                                                
-                                                
+                                                                                                
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_raum_fk
               FOREIGN KEY (raum_id)
@@ -171,6 +171,46 @@ ALTER TABLE person
                                                 );                                                
 
 
+
+
+-- fun1
+
+-- proc2
+
+-- fun3
+
+-- fun4
+
+-- trigger1
+
+-- trigger2
+
+-- trigger3
+DELIMITER $$
+CREATE TRIGGER trg_delete_reservations
+BEFORE DELETE
+ON berechtigung
+FOR EACH ROW
+BEGIN
+	DELETE FROM reservierung
+    WHERE person_id = old.person_id
+    AND current_timestamp() < reserviert_von;
+END $$
+DELIMITER ;
+
+-- trigger4
+DELIMITER $$
+CREATE TRIGGER trg_notify_new_room
+AFTER INSERT 
+ON raum
+FOR EACH ROW
+BEGIN
+	-- notify
+END $$
+DELIMITER ;
+
+/*
+-- trigger5
 DELIMITER $$
 CREATE TRIGGER trg_delete_records
 BEFORE DELETE 
@@ -190,7 +230,9 @@ END$$
 /
 DELIMITER ;
 SET @trg_delete_records_active=1;
+*/
 
+-- view
 CREATE OR REPLACE VIEW view_berechtigte 
 AS 
 	SELECT p.person_person_id person_id, p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id 
