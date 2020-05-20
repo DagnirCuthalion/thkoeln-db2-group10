@@ -58,16 +58,16 @@ CREATE TABLE ausleihe(
 transponder_id INTEGER (9),
 person_person_id INTEGER (9),
 pfoertner_person_id INTEGER (9),
-ausgeliehen_von DATE NOT NULL,
-ausgeliehen_bis DATE NOT NULL,
+ausgeliehen_von DATETIME NOT NULL,
+ausgeliehen_bis DATETIME NOT NULL,
 CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,ausgeliehen_von)
 );
 
 CREATE TABLE berechtigung(
 person_id INTEGER(9),
 raumverantwortlicher_id INTEGER (9),
-berechtigung_von DATE NOT NULL,
-berechtigung_bis DATE NOT NULL,
+berechtigung_von DATETIME NOT NULL,
+berechtigung_bis DATETIME NOT NULL,
 raum_nr VARCHAR (45) NOT NULL,
 CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id)
 );
@@ -76,8 +76,8 @@ CREATE TABLE reservierung(
 reservierungs_id INTEGER (9) PRIMARY KEY,
 person_id INTEGER (9) NOT NULL,
 raum_id INTEGER (9) NOT NULL,
-reserviert_von DATE NOT NULL,
-reserviert_bis DATE NOT NULL
+reserviert_von DATETIME NOT NULL,
+reserviert_bis DATETIME NOT NULL
 );
 
 CREATE TABLE labor(
@@ -150,9 +150,19 @@ ALTER TABLE raumverantwortlicher
                                 REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 ); 
 ALTER TABLE schadensmeldung
-        ADD ( CONSTRAINT bezieht_sich_auf_fk
-              FOREIGN KEY (transponder_id,person_person_id,pfoertner_person_id)
-                                REFERENCES ausleihe(transponder_id,person_person_id,pfoertner_person_id) ON DELETE CASCADE
+        ADD ( CONSTRAINT bezieht_sich_auf_transponder_fk
+              FOREIGN KEY (transponder_id)
+                                REFERENCES ausleihe(transponder_id) ON DELETE CASCADE
+                                                );
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT bezieht_sich_auf_person_fk
+              FOREIGN KEY (person_person_id)
+                                REFERENCES ausleihe(person_person_id) ON DELETE CASCADE
+                                                );  
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT bezieht_sich_auf_pfoerter_fk
+              FOREIGN KEY (pfoertner_person_id)
+                                REFERENCES ausleihe(pfoertner_person_id) ON DELETE CASCADE
                                                 );
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_raum_fk
@@ -171,7 +181,7 @@ ALTER TABLE person
 /*
 DROP PROCEDURE IF EXISTS fun_transponder_ausleihen;
 DELIMITER $$
-CREATE PROCEDURE fun_transponder_ausleihen (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9))
+CREATE PROCEDURE fun_transponder_ausleihen (IN p_transponder_id INTEGER(9), IN p_person_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9), IN p_ausgeliehen_bis  DATETIME )
 BEGIN
     IF (
 		SELECT count(*) 
@@ -197,7 +207,7 @@ BEGIN
                 
                 -- alles in ausleihe einfügen
                 INSERT INTO ausleihe
-                VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp());
+                VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp(), p_ausgeliehen_bis);
 			END IF;
 		END IF;
 	END IF;
@@ -223,39 +233,95 @@ DELIMITER ;
 -- fun4
 
 -- trigger1
+-- DROP TRIGGER IF EXISTS 
 
 -- trigger2
+DROP TRIGGER IF EXISTS trg_check_ausleihe_duration;
+DROP TRIGGER IF EXISTS trg_check_reservierung_duration;
+
+DELIMITER $$
+CREATE TRIGGER trg_check_ausleihe_duration
+BEFORE INSERT
+ON ausleihe
+FOR EACH ROW
+BEGIN
+	IF( DATEDIFF(new.ausgeliehen_von, new.ausgeliehen_bis) > 1) THEN
+		-- fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1 HOUR)
+        SIGNAL SQLSTATE '45003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag ausgeliehen werden', MYSQL_ERRNO = 1003;
+	END IF;
+    IF EXISTS ( SELECT count(*) FROM reservierung r WHERE (r.transponder_id = new.transponder_id AND (r.reserviert_von < new.ausgeliehen_von AND r.reserviert_bis > new.ausgeliehen_von) 
+				OR (r.reserviert_von < new.ausgeliehen_bis AND r.reserviert_bis > new.ausgeliehen_bis)) ) THEN
+			-- SELECT MAX(r.reserviert_bis) as 'Alternativtermin zur Ausleihe' FROM reservierung r WHERE r.transponder_id = new.transponder_id;
+			SIGNAL SQLSTATE '45001' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits reserviert', MYSQL_ERRNO = 1001;
+		ELSE IF EXISTS ( SELECT COUNT(*) FROM ausleihe a WHERE (a.transponder_id = new.transponder_id AND (a.ausgeliehen_von < new.ausgeliehen_von AND a.ausgeliehen_bis > new.ausgeliehen_von) 
+				OR (a.ausgeliehen_von < new.ausgeliehen_bis AND a.ausgeliehen_bis > new.ausgeliehen_bis)) ) THEN
+			-- SELECT MAX(a.ausgeliehen_bis) as 'Alternativtermin zur Ausleihe' FROM ausleihe a WHERE a.transponder_id = new.transponder_id;
+			SIGNAL SQLSTATE '45002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1002;
+		END IF;
+    END IF;
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'An error occurred', MYSQL_ERRNO = 1000;
+END $$
+
+CREATE TRIGGER trg_check_reservierung_duration
+BEFORE INSERT
+ON reservierung
+FOR EACH ROW
+BEGIN
+	IF( DATEDIFF(new.reserviert_von, new.reserviert_bis) > 1) THEN
+		-- fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1 HOUR)
+        SIGNAL SQLSTATE '46003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag resverviert werden', MYSQL_ERRNO = 1103;
+	END IF;
+    IF EXISTS ( SELECT count(*) FROM reservierung r, kann_oeffnen k WHERE (r.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
+				OR (r.reserviert_von < new.reserviert_bis AND r.reserviert_bis > new.reserviert_bis)) ) THEN
+			-- SELECT MAX(r.reserviert_bis) as 'Alternativtermin zur Ausleihe' FROM reservierung r WHERE r.transponder_id = new.transponder_id;
+			SIGNAL SQLSTATE '46001' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits reserviert', MYSQL_ERRNO = 1101;
+		ELSE IF EXISTS ( SELECT COUNT(*) FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (a.ausgeliehen_von < new.reserviert_von AND a.ausgeliehen_bis > new.reserviert_von) 
+				OR (a.ausgeliehen_von < new.reserviert_bis AND a.ausgeliehen_bis > new.reserviert_bis)) ) THEN
+			-- SELECT MAX(a.ausgeliehen_bis) as 'Alternativtermin zur Ausleihe' FROM ausleihe a WHERE a.transponder_id = new.transponder_id;
+			SIGNAL SQLSTATE '46002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1102;
+		END IF;
+    END IF;
+    SIGNAL SQLSTATE '46000'
+      SET MESSAGE_TEXT = 'An error occurred', MYSQL_ERRNO = 1100;
+END $$
+DELIMITER ;
 
 -- trigger3
+DROP TRIGGER IF EXISTS trg_delete_reservations;
 DELIMITER $$
 CREATE TRIGGER trg_delete_reservations
 BEFORE DELETE
 ON berechtigung
 FOR EACH ROW
 BEGIN
-	DELETE FROM reservierung r
-    WHERE r.person_id = old.person_id
-    AND current_timestamp() < r.reserviert_von;
+	-- DELETE FROM reservierung r WHERE r.person_id = old.person_id AND current_timestamp() < r.reserviert_von;
+    SIGNAL SQLSTATE '45005' SET MESSAGE_TEXT = 'Berechtigte Person hat ausstehende Reservierungen' , MYSQL_ERRNO = 1005;
 END $$
 DELIMITER ;
 
 -- trigger4
+DROP TRIGGER IF EXISTS trg_notify_new_room;
 DELIMITER $$
 CREATE TRIGGER trg_notify_new_room
 AFTER INSERT 
 ON raum
 FOR EACH ROW
 BEGIN
-	SELECT r.raumverantwortlicher_id, r.vorname, r.nachname FROM raumverantwortlicher r, labor l
-    WHERE r.labor_id = l.labor_id
-    AND l.labor_id = new.labor_id;
+	DECLARE rid integer(9);
+    DECLARE vname VARCHAR(45);
+    DECLARE nname VARCHAR(45);
+    DECLARE msg varchar(255);
+	SELECT r.raumverantwortlicher_id, r.vorname, r.nachname INTO rid, vname, nname FROM raumverantwortlicher r, labor l WHERE r.labor_id = l.labor_id AND l.labor_id = new.labor_id;
+    SET msg = 'placeholdernotification to ' || rid || ' ' || vname || ' ' || nname;
     -- TODO: notify
+    SIGNAL SQLSTATE '45004' SET MESSAGE_TEXT = msg , MYSQL_ERRNO = 1004;
 END $$
 DELIMITER ;
 
 -- trigger5
 /*
-
+DROP TRIGGER IF EXISTS trg_delete_records;
 DELIMITER $$
 CREATE TRIGGER trg_delete_records
 BEFORE DELETE 
