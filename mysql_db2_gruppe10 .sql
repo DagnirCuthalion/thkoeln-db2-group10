@@ -16,7 +16,7 @@ CREATE TABLE raum(
 raum_id INTEGER(9) PRIMARY KEY,
 raum_nr VARCHAR(10) NOT NULL,
 gebaeude VARCHAR(45),
-etage INTEGER(1),
+etage varchar(20),
 labor_id INTEGER (9),
 gesperrt BOOLEAN
 );
@@ -29,7 +29,7 @@ CONSTRAINT XPKkann_oefnnen PRIMARY KEY (raum_id, transponder_id)
 
 CREATE TABLE transponder(
 transponder_id INTEGER (9) PRIMARY KEY,
-funktionsfaehigkeit VARCHAR (45)
+funktionsfaehigkeit BOOLEAN
 );
 
 CREATE TABLE pfoertner(
@@ -200,16 +200,27 @@ BEGIN
         AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id
 	)
 	THEN
-		IF EXISTS(SELECT * FROM transponder t WHERE t.transponder_id = p_transponder_id AND t.funktionsfaehigkeit = 'funktionsfaehig')  THEN
-        -- ausgeliehen
-			IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL)) THEN
-				-- berechtigender bestimmen
+		IF(SELECT gesperrt 
+		FROM berechtigung b, kann_oeffnen k, raum r 
+        WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
+        AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id=FALSE) THEN
+			IF EXISTS(SELECT * FROM transponder t WHERE t.transponder_id = p_transponder_id AND t.funktionsfaehigkeit = TRUE)  THEN
+			-- ausgeliehen
+				IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL)) THEN
+					-- berechtigender bestimmen
                 
-                -- alles in ausleihe einfügen
-                INSERT INTO ausleihe
-                VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp(), p_ausgeliehen_bis);
+					-- alles in ausleihe einfügen
+					INSERT INTO ausleihe
+					VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp(), p_ausgeliehen_bis);
+				ELSE
+					SIGNAL SQLSTATE '45002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1002;
+				END IF;
+			SIGNAL SQLSTATE '45007' SET MESSAGE_TEXT = 'Transponder defekt', MYSQL_ERRNO = 1007;
 			END IF;
-		END IF;
+		ELSE
+			SIGNAL SQLSTATE '45009' SET MESSAGE_TEXT = 'Raum gesperrt', MYSQL_ERRNO = 1009;
+        END IF;
+	SIGNAL SQLSTATE '45008' SET MESSAGE_TEXT = 'Fehlende Berechtigung', MYSQL_ERRNO = 1008;
 	END IF;
 END $$
 DELIMITER ;
