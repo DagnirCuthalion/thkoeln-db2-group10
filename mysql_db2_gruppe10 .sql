@@ -256,8 +256,6 @@ DELIMITER ;
 
 -- trigger2
 DROP TRIGGER IF EXISTS trg_check_ausleihe_duration;
-DROP TRIGGER IF EXISTS trg_check_reservierung_duration;
-
 DELIMITER $$
 CREATE TRIGGER trg_check_ausleihe_duration
 BEFORE INSERT
@@ -265,7 +263,7 @@ ON ausleihe
 FOR EACH ROW
 BEGIN
 	IF( DATEDIFF(new.ausgeliehen_von, new.ausgeliehen_bis) > 1) THEN
-		-- fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1 HOUR)
+		CALL fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis-1);
         SIGNAL SQLSTATE '45003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag ausgeliehen werden', MYSQL_ERRNO = 1003;
 	END IF;
     IF EXISTS ( SELECT count(*) FROM reservierung r WHERE (r.transponder_id = new.transponder_id AND (r.reserviert_von < new.ausgeliehen_von AND r.reserviert_bis > new.ausgeliehen_von) 
@@ -281,7 +279,10 @@ BEGIN
     SIGNAL SQLSTATE '45000'
       SET MESSAGE_TEXT = 'An error occurred', MYSQL_ERRNO = 1000;
 END $$
+DELIMITER ;
 
+DROP TRIGGER IF EXISTS trg_check_reservierung_duration;
+DELIMITER $$
 CREATE TRIGGER trg_check_reservierung_duration
 BEFORE INSERT
 ON reservierung
