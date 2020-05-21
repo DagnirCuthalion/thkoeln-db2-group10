@@ -289,7 +289,7 @@ ON reservierung
 FOR EACH ROW
 BEGIN
 	IF( DATEDIFF(new.reserviert_von, new.reserviert_bis) > 1) THEN
-		-- fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1 HOUR)
+		CALL fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1);
         SIGNAL SQLSTATE '46003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag resverviert werden', MYSQL_ERRNO = 1103;
 	END IF;
     IF EXISTS ( SELECT count(*) FROM reservierung r, kann_oeffnen k WHERE (r.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
