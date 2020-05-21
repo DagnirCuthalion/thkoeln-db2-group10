@@ -232,14 +232,20 @@ DROP PROCEDURE IF EXISTS fun_transponder_zurueckgeben;
 DELIMITER $$
 CREATE PROCEDURE  fun_transponder_zurueckgeben (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9))
 BEGIN
-	UPDATE ausleihe a
-    SET a.ausgeliehen_bis = current_timestamp()
-    WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id 
-    AND a.ausgeliehen_von = (SELECT MAX(ausgeliehen_von) FROM ausleihe a WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id);
+	IF NOT EXISTS( 	SELECT s.schadensmeldung_id FROM schadensmeldung s, ausleihe a CROSS JOIN information_schema.tables i 
+				WHERE s.transponder_id = p_transponder_id AND s.person_person_id = p_person_id AND i.UPDATE_TIME > a.ausgeliehen_von AND a.person_person_id = p_person_id AND i.TABLE_NAME = 'schadensmeldung') THEN
+		UPDATE ausleihe a
+		SET a.ausgeliehen_bis = current_timestamp()
+		WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id 
+		AND a.ausgeliehen_von = (SELECT MAX(ausgeliehen_von) FROM ausleihe a WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id);
+    ELSE 
+		SIGNAL SQLSTATE '45010' SET MESSAGE_TEXT = 'Schadensmeldung vorliegend', MYSQL_ERRNO = 1010;
+	END IF;
 END $$
 DELIMITER ;
 
 -- fun3
+
 
 -- fun4
 
