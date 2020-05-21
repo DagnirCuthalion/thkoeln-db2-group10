@@ -13,7 +13,7 @@ DROP TABLE labor;
 
 
 CREATE TABLE raum(
-raum_id INTEGER(9) PRIMARY KEY,
+raum_id INTEGER(9) PRIMARY KEY auto_increment,
 raum_nr VARCHAR(10) NOT NULL,
 gebaeude VARCHAR(45),
 etage varchar(20),
@@ -28,7 +28,7 @@ CONSTRAINT XPKkann_oefnnen PRIMARY KEY (raum_id, transponder_id)
 );
 
 CREATE TABLE transponder(
-transponder_id INTEGER (9) PRIMARY KEY,
+transponder_id INTEGER (9) PRIMARY KEY auto_increment,
 funktionsfaehigkeit BOOLEAN
 );
 
@@ -40,7 +40,7 @@ geburtsdatum DATE NOT NULL
 );
 
 CREATE TABLE person(
-person_person_id INTEGER (9) PRIMARY KEY,
+person_person_id INTEGER (9) PRIMARY KEY auto_increment,
 labor_id INTEGER (9) NOT NULL,
 nachname VARCHAR (45) NOT NULL,
 vorname VARCHAR (45) NOT NULL,
@@ -83,7 +83,7 @@ CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id)
 );
 
 CREATE TABLE reservierung(
-reservierung_id INTEGER (9) PRIMARY KEY,
+reservierung_id INTEGER (9) PRIMARY KEY auto_increment,
 reserviert_von DATETIME NOT NULL,
 reserviert_bis DATETIME NOT NULL,
 raum_id INTEGER (9) NOT NULL,
@@ -91,12 +91,12 @@ person_id INTEGER (9) NOT NULL
 );
 
 CREATE TABLE labor(
-labor_id INTEGER (9) PRIMARY KEY,
+labor_id INTEGER (9) PRIMARY KEY auto_increment,
 labor_name VARCHAR(45) NOT NULL
 );
 
 CREATE TABLE schadensmeldung(
-schadensmeldung_id INTEGER (9) PRIMARY KEY,
+schadensmeldung_id INTEGER (9) PRIMARY KEY auto_increment,
 transponder_id INTEGER (9) NOT NULL,
 person_person_id INTEGER (9) NOT NULL,
 pfoertner_person_id INTEGER (9) NOT NULL,
@@ -259,6 +259,32 @@ END $$
 DELIMITER ;
 
 -- fun4
+DROP PROCEDURE IF EXISTS proc_raum_reservieren;
+DELIMITER $$
+CREATE PROCEDURE proc_raum_reservieren (IN p_raum_id INTEGER(9), IN p_person_id INTEGER(9), IN p_reserviert_von DATETIME, IN p_reserviert_bis DATETIME)
+BEGIN
+    IF EXISTS 
+    (
+		SELECT * 
+		FROM berechtigung b, raum r 
+        WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr AND r.raum_id = p_raum_id
+	)
+	THEN
+		IF((SELECT gesperrt 
+		FROM berechtigung b, raum r 
+        WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr AND r.raum_id = p_raum_id) =FALSE) THEN
+			IF (p_reserviert_von>=p_reserviert_bis) THEN 
+				INSERT INTO reservierung (raum_id,person_id,reserviert_von,reserviert_bis) VALUES (p_raum_id, p_person_id, p_reserviert_von, p_reserviert_bis);
+			ELSE 
+				SIGNAL SQLSTATE '45012' SET MESSAGE_TEXT = 'Raum darf nur für positive Zeitspanne reserviert werden', MYSQL_ERRNO = 1012;
+			END IF;
+		ELSE
+			SIGNAL SQLSTATE '45009' SET MESSAGE_TEXT = 'Raum gesperrt', MYSQL_ERRNO = 1009;
+        END IF;
+	SIGNAL SQLSTATE '45008' SET MESSAGE_TEXT = 'Fehlende Berechtigung', MYSQL_ERRNO = 1008;
+	END IF;
+END $$
+DELIMITER ;
 
 -- trigger1
 DROP TRIGGER IF EXISTS trg_check_berechtigung_still_valid;
