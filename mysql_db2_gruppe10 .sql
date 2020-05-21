@@ -314,8 +314,8 @@ BEFORE DELETE
 ON berechtigung
 FOR EACH ROW
 BEGIN
-	-- DELETE FROM reservierung r WHERE r.person_id = old.person_id AND current_timestamp() < r.reserviert_von;
-    SIGNAL SQLSTATE '45005' SET MESSAGE_TEXT = 'Berechtigte Person hat ausstehende Reservierungen' , MYSQL_ERRNO = 1005;
+	DELETE FROM reservierung WHERE person_id = old.person_id AND (current_timestamp() - reserviert_von) >0;
+    SIGNAL SQLSTATE '45005' SET MESSAGE_TEXT = 'Berechtigte Person hatte ausstehende Reservierungen' , MYSQL_ERRNO = 1005;
 END $$
 DELIMITER ;
 
