@@ -76,7 +76,7 @@ CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,ausgeliehen
 CREATE TABLE berechtigung(
 raumverantwortlicher_id INTEGER (9),
 person_id INTEGER(9),
-raum_nr VARCHAR (45) NOT NULL,
+raum_nr VARCHAR (10) NOT NULL,
 berechtigung_von DATETIME NOT NULL,
 berechtigung_bis DATETIME NOT NULL,
 CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id)
@@ -188,9 +188,9 @@ ALTER TABLE person
 -- notification function
 
 -- fun1
-DROP PROCEDURE IF EXISTS fun_transponder_ausleihen;
+DROP PROCEDURE IF EXISTS proc_transponder_ausleihen;
 DELIMITER $$
-CREATE PROCEDURE fun_transponder_ausleihen (IN p_transponder_id INTEGER(9), IN p_person_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9), IN p_ausgeliehen_bis  DATETIME )
+CREATE PROCEDURE proc_transponder_ausleihen (IN p_transponder_id INTEGER(9), IN p_person_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9), IN p_ausgeliehen_bis  DATETIME )
 BEGIN
     IF EXISTS 
     (
@@ -228,9 +228,9 @@ DELIMITER ;
     
 
 -- proc2
-DROP PROCEDURE IF EXISTS fun_transponder_zurueckgeben;
+DROP PROCEDURE IF EXISTS proc_transponder_zurueckgeben;
 DELIMITER $$
-CREATE PROCEDURE  fun_transponder_zurueckgeben (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9))
+CREATE PROCEDURE  proc_transponder_zurueckgeben (IN p_person_id INTEGER(9), IN p_transponder_id INTEGER(9))
 BEGIN
 	IF NOT EXISTS( 	SELECT s.schadensmeldung_id FROM schadensmeldung s, ausleihe a CROSS JOIN information_schema.tables i 
 				WHERE s.transponder_id = p_transponder_id AND s.person_person_id = p_person_id AND i.UPDATE_TIME > a.ausgeliehen_von AND a.person_person_id = p_person_id AND i.TABLE_NAME = 'schadensmeldung') THEN
@@ -245,7 +245,18 @@ END $$
 DELIMITER ;
 
 -- fun3
-
+DROP PROCEDURE IF EXISTS proc_add_berechtigung;
+DELIMITER $$
+CREATE PROCEDURE  proc_add_berechtigung (IN p_raumverantwortlicher_id INTEGER(9), IN p_person_id INTEGER(9), IN p_raum_nr VARCHAR(10), IN p_berechtigung_von DATETIME, IN p_berechtigung_bis DATETIME)
+BEGIN
+	IF ((SELECT l.labor_name FROM labor l, person p WHERE l.labor_id = p.labor_id AND p.person_person_id = p_person_id) = 'Wartungspersonal' OR (EXISTS ( SELECT * FROM raum r, labor l, person p WHERE r.raum_nr = p_raum_nr AND r.labor_id = l.labor_id AND p.labor_id = l.labor_id and p.person_person_id = p_person_id))) THEN
+		INSERT INTO berechtigung
+        VALUES (p_raumverantwortlicher_id, p_person_id, p_raum_nr, p_berechtigung_von, p_berechtigung_bis);
+    ELSE 
+		SIGNAL SQLSTATE '45011' SET MESSAGE_TEXT = 'Zu Berechtigender gehört nicht zum entsprechenden Labor des Raums', MYSQL_ERRNO = 1011;
+	END IF;
+END $$
+DELIMITER ;
 
 -- fun4
 
@@ -280,7 +291,7 @@ ON ausleihe
 FOR EACH ROW
 BEGIN
 	IF( DATEDIFF(new.ausgeliehen_von, new.ausgeliehen_bis) > 1) THEN
-		CALL fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis-1);
+		CALL proc_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis-1);
         SIGNAL SQLSTATE '45003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag ausgeliehen werden', MYSQL_ERRNO = 1003;
 	END IF;
     IF EXISTS ( SELECT count(*) FROM reservierung r WHERE (r.transponder_id = new.transponder_id AND (r.reserviert_von < new.ausgeliehen_von AND r.reserviert_bis > new.ausgeliehen_von) 
@@ -306,7 +317,7 @@ ON reservierung
 FOR EACH ROW
 BEGIN
 	IF( DATEDIFF(new.reserviert_von, new.reserviert_bis) > 1) THEN
-		CALL fun_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1);
+		-- CALL proc_raum_reservieren(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1);
         SIGNAL SQLSTATE '46003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag resverviert werden', MYSQL_ERRNO = 1103;
 	END IF;
     IF EXISTS ( SELECT count(*) FROM reservierung r, kann_oeffnen k WHERE (r.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
