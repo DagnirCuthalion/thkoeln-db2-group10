@@ -4,6 +4,7 @@ DROP TABLE reservierung;
 DROP TABLE schadensmeldung;
 DROP TABLE raum;
 DROP TABLE ausleihe;
+DROP TABLE ausleihe_archiv;
 DROP TABLE transponder;
 DROP TABLE pfoertner;
 DROP TABLE person;
@@ -13,10 +14,11 @@ DROP TABLE labor;
 
 CREATE TABLE raum(
 raum_id INTEGER(9) PRIMARY KEY,
-raum_nr INTEGER(4) NOT NULL,
-etage INTEGER(1),
+raum_nr VARCHAR(10) NOT NULL,
 gebaeude VARCHAR(45),
-labor_id INTEGER (9)
+etage INTEGER(1),
+labor_id INTEGER (9),
+gesperrt BOOLEAN
 );
 
 CREATE TABLE kann_oeffnen(
@@ -31,10 +33,10 @@ funktionsfaehigkeit VARCHAR (45)
 );
 
 CREATE TABLE pfoertner(
-pfoertner_person_id INTEGER (9) PRIMARY KEY,
+pfoertner_person_id INTEGER(9) PRIMARY KEY,
 nachname VARCHAR (45) NOT NULL,
 vorname VARCHAR (45) NOT NULL,
-geburtsdatum VARCHAR (45) NOT NULL
+geburtsdatum DATE NOT NULL
 );
 
 CREATE TABLE person(
@@ -46,11 +48,10 @@ geburtsdatum DATE
 );
 
 CREATE TABLE raumverantwortlicher(
-person_person_id INTEGER (9) NOT NULL,
-raumverantwortlicher_id INTEGER (9) PRIMARY KEY,
+raumverantworlicher_person_id INTEGER (9)  PRIMARY KEY,
 nachname VARCHAR (45) NOT NULL,
 vorname VARCHAR (45) NOT NULL,
-geburtsdatum VARCHAR (45) NOT NULL,
+geburtsdatum DATE NOT NULL,
 labor_id INTEGER (9) NOT NULL
 );
 
@@ -63,21 +64,30 @@ ausgeliehen_bis DATETIME NOT NULL,
 CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,ausgeliehen_von)
 );
 
+CREATE TABLE ausleihe_archiv(
+transponder_id INTEGER (9),
+person_person_id INTEGER (9),
+pfoertner_person_id INTEGER (9),
+ausgeliehen_von DATETIME NOT NULL,
+ausgeliehen_bis DATETIME NOT NULL,
+CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_person_id,ausgeliehen_von)
+);
+
 CREATE TABLE berechtigung(
-person_id INTEGER(9),
 raumverantwortlicher_id INTEGER (9),
+person_id INTEGER(9),
+raum_nr VARCHAR (45) NOT NULL,
 berechtigung_von DATETIME NOT NULL,
 berechtigung_bis DATETIME NOT NULL,
-raum_nr VARCHAR (45) NOT NULL,
 CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id)
 );
 
 CREATE TABLE reservierung(
-reservierungs_id INTEGER (9) PRIMARY KEY,
-person_id INTEGER (9) NOT NULL,
-raum_id INTEGER (9) NOT NULL,
+reservierung_id INTEGER (9) PRIMARY KEY,
 reserviert_von DATETIME NOT NULL,
-reserviert_bis DATETIME NOT NULL
+reserviert_bis DATETIME NOT NULL,
+raum_id INTEGER (9) NOT NULL,
+person_id INTEGER (9) NOT NULL
 );
 
 CREATE TABLE labor(
@@ -122,7 +132,7 @@ ALTER TABLE ausleihe
 ALTER TABLE berechtigung
         ADD ( CONSTRAINT vergibt_berechtigung_fk
               FOREIGN KEY (raumverantwortlicher_id)
-                                REFERENCES raumverantwortlicher(raumverantwortlicher_id) ON DELETE CASCADE
+                                REFERENCES raumverantwortlicher(raumverantworlicher_person_id) ON DELETE CASCADE
                                                 );                                                   
 ALTER TABLE berechtigung
         ADD ( CONSTRAINT erhaelt_berechtigung_fk
@@ -178,31 +188,21 @@ ALTER TABLE person
 -- notification function
 
 -- fun1
-/*
 DROP PROCEDURE IF EXISTS fun_transponder_ausleihen;
 DELIMITER $$
 CREATE PROCEDURE fun_transponder_ausleihen (IN p_transponder_id INTEGER(9), IN p_person_id INTEGER(9), IN p_pfoertner_person_id INTEGER(9), IN p_ausgeliehen_bis  DATETIME )
 BEGIN
-    IF (
-		SELECT count(*) 
-		FROM 
-        (	
-			(SELECT * FROM berechtigung b, kann_oeffnen k, raum r 
-			WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
-			AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id)
-			MINUS
-			(SELECT * FROM berechtigung b, kann_oeffnen k, raum r 
-			WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
-			AND k.raum_id = r.raum_id AND NOT k.transponder_id = p_transponder_id);
-		)
+    IF EXISTS 
+    (
+		SELECT * 
+		FROM berechtigung b, kann_oeffnen k, raum r 
+        WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
+        AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id
 	)
-        
-							
 	THEN
-    -- funktionsfähig
-		IF(SELECT t.funktionsfähigkeit FROM transponder t WHERE t.transponder_id=p_transponder_id) = 'funktionsfähig') THEN
+		IF EXISTS(SELECT * FROM transponder t WHERE t.transponder_id = p_transponder_id AND t.funktionsfaehigkeit = 'funktionsfaehig')  THEN
         -- ausgeliehen
-			IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL) THEN
+			IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL)) THEN
 				-- berechtigender bestimmen
                 
                 -- alles in ausleihe einfügen
@@ -213,7 +213,7 @@ BEGIN
 	END IF;
 END $$
 DELIMITER ;
-*/
+
     
 
 -- proc2
@@ -233,7 +233,26 @@ DELIMITER ;
 -- fun4
 
 -- trigger1
--- DROP TRIGGER IF EXISTS 
+DROP TRIGGER IF EXISTS trg_check_berechtigung_still_valid;
+DELIMITER $$
+CREATE TRIGGER trg_check_berechtigung_still_valid
+BEFORE INSERT
+ON ausleihe
+FOR EACH ROW
+BEGIN
+	IF NOT EXISTS
+    (
+        SELECT * 
+        FROM berechtigung b, raum r, kann_oeffnen k
+        WHERE b.berechtigung_bis > current_timestamp() AND b.raum_nr = r.raum_nr 
+        AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id
+		AND NOT k.transponder_id != new.transponder_id
+	) THEN
+		SIGNAL SQLSTATE '45006' SET MESSAGE_TEXT = 'Berechtigung nicht mehr gueltig' , MYSQL_ERRNO = 1006;
+    END IF;
+END $$
+DELIMITER ;
+
 
 -- trigger2
 DROP TRIGGER IF EXISTS trg_check_ausleihe_duration;
@@ -319,8 +338,9 @@ BEGIN
 END $$
 DELIMITER ;
 
--- trigger5
 /*
+-- trigger5
+
 DROP TRIGGER IF EXISTS trg_delete_records;
 DELIMITER $$
 CREATE TRIGGER trg_delete_records
@@ -348,8 +368,8 @@ CREATE OR REPLACE VIEW view_berechtigte
 AS 
 	SELECT p.person_person_id person_id, p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id 
 	FROM berechtigung b, person p, ausleihe a, raumverantwortlicher r, transponder t, kann_oeffnen k
-    WHERE ((r.raumverantwortlicher_id = 1)
-    AND r.raumverantwortlicher_id = b.raumverantwortlicher_id
+    WHERE ((r.raumverantworlicher_person_id = 1)
+    AND r.raumverantworlicher_person_id = b.raumverantwortlicher_id
     AND b.person_id = p.person_person_id
     AND p.person_person_id = a.person_person_id
     AND a.transponder_id = t.transponder_id
