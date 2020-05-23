@@ -1,0 +1,355 @@
+DROP TABLE raum CASCADE CONSTRAINTS;
+DROP TABLE kann_oeffnen CASCADE CONSTRAINTS;
+DROP TABLE transponder CASCADE CONSTRAINTS;
+DROP TABLE pfoertner CASCADE CONSTRAINTS;
+DROP TABLE person CASCADE CONSTRAINTS;
+DROP TABLE raumverantwortlicher CASCADE CONSTRAINTS;
+DROP TABLE ausleihe CASCADE CONSTRAINTS;
+DROP TABLE berechtigung CASCADE CONSTRAINTS;
+DROP TABLE reservierung CASCADE CONSTRAINTS;
+DROP TABLE labor CASCADE CONSTRAINTS;
+DROP TABLE schadensmeldung CASCADE CONSTRAINTS;
+
+CREATE TABLE raum(
+raum_id NUMBER(9) PRIMARY KEY,
+raum_nr NUMBER(4) NOT NULL,
+etage VARCHAR2(15),
+gebaeude VARCHAR2(45),
+labor_id NUMBER (9),
+gesperrt INTEGER
+);
+
+CREATE TABLE kann_oeffnen(
+raum_id NUMBER (9),
+transponder_id NUMBER (9),
+CONSTRAINT XPKkann_oefnnen PRIMARY KEY (raum_id, transponder_id)
+);
+
+CREATE TABLE transponder(
+transponder_id NUMBER (9) PRIMARY KEY,
+funktionsfaehigkeit INTEGER
+);
+
+CREATE TABLE pfoertner(
+pfoertner_id NUMBER (9) PRIMARY KEY,
+nachname VARCHAR2 (45) NOT NULL,
+vorname VARCHAR2 (45) NOT NULL,
+geburtsdatum DATE NOT NULL
+);
+
+CREATE TABLE person(
+person_id NUMBER (9) PRIMARY KEY,
+nachname VARCHAR2 (45) NOT NULL,
+vorname VARCHAR2 (45) NOT NULL,
+geburtsdatum DATE
+);
+
+CREATE TABLE raumverantwortlicher(
+raumverantwortlicher_id NUMBER (9) PRIMARY KEY,
+nachname VARCHAR2 (45) NOT NULL,
+vorname VARCHAR2 (45) NOT NULL,
+geburtsdatum VARCHAR2 (45) NOT NULL,
+labor_id NUMBER (9) NOT NULL
+);
+
+CREATE TABLE ausleihe(
+transponder_id INTEGER,
+person_id INTEGER,
+pfoertner_id INTEGER NOT NUll,
+ausgeliehen_von DATE,
+ausgeliehen_bis DATE NOT NULL,
+CONSTRAINT XPKausleihe PRIMARY KEY (transponder_id, person_id, ausgeliehen_von)
+);
+
+CREATE TABLE berechtigung(
+person_id NUMBER (9),
+raumverantwortlicher_id NUMBER (9),
+berechtigung_von DATE NOT NULL,
+berechtigung_bis DATE NOT NULL,
+raum_id VARCHAR2 (45) NOT NULL,
+CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id, raum_id, berechtigung_von)
+);
+
+CREATE TABLE reservierung(
+reservierungs_id NUMBER (9) PRIMARY KEY,
+person_id NUMBER (9) NOT NULL,
+raum_id NUMBER (9) NOT NULL,
+reserviert_von DATE NOT NULL,
+reserviert_bis DATE NOT NULL
+);
+
+CREATE TABLE labor(
+labor_id NUMBER (9) PRIMARY KEY,
+labor_name VARCHAR2(45) NOT NULL
+);
+
+CREATE TABLE schadensmeldung(
+schadensmeldung_id NUMBER (9) PRIMARY KEY,
+transponder_id NUMBER (9) NOT NULL,
+pfoertner_id NUMBER (9) NOT NULL,
+person_id NUMBER (9) NOT NULL,
+raum_id NUMBER (9) NOT NULL,
+meldung VARCHAR2 (45) NOT NULL,
+erheblicher_Schaden INTEGER NOT NULL
+);
+
+ALTER TABLE kann_oeffnen
+        ADD ( CONSTRAINT wird_geoefnnet_fk
+              FOREIGN KEY (raum_id)
+                                REFERENCES raum ON DELETE CASCADE
+                                                );
+
+ALTER TABLE kann_oeffnen
+        ADD ( CONSTRAINT oeffnet_fk
+              FOREIGN KEY (transponder_id)
+                                REFERENCES transponder ON DELETE CASCADE
+                                                );
+
+ALTER TABLE ausleihe
+        ADD ( CONSTRAINT wird_ausgeliehent_fk
+              FOREIGN KEY (transponder_id)
+                                REFERENCES transponder ON DELETE CASCADE
+                                                );
+
+ALTER TABLE ausleihe
+        ADD ( CONSTRAINT vergibt_transponder_fk
+              FOREIGN KEY (pfoertner_id)
+                                REFERENCES pfoertner
+                                                );
+
+
+ALTER TABLE ausleihe
+        ADD ( CONSTRAINT leiht_aus_fk
+              FOREIGN KEY (person_id)
+                                REFERENCES person
+                                                );
+
+
+ALTER TABLE berechtigung
+        ADD ( CONSTRAINT vergibt_berechtigung_fk
+              FOREIGN KEY (raumverantwortlicher_id)
+                                REFERENCES raumverantwortlicher ON DELETE CASCADE
+                                                );
+
+ALTER TABLE berechtigung
+        ADD ( CONSTRAINT erhaelt_berechtigung_fk
+              FOREIGN KEY (person_id)
+                                REFERENCES person ON DELETE CASCADE
+                                                );
+
+ALTER TABLE reservierung
+        ADD ( CONSTRAINT wird_reserviret_fk
+              FOREIGN KEY (raum_id)
+                                REFERENCES raum ON DELETE CASCADE
+                                                );
+
+ALTER TABLE reservierung
+        ADD ( CONSTRAINT reserviret_fk
+              FOREIGN KEY (person_id)
+                                REFERENCES person ON DELETE CASCADE
+                                                );
+
+ALTER TABLE raum
+        ADD ( CONSTRAINT teil_von_fk
+              FOREIGN KEY (labor_id)
+                                REFERENCES labor
+                                                );
+ALTER TABLE raumverantwortlicher
+        ADD ( CONSTRAINT gehoert_zu_fk
+              FOREIGN KEY (labor_id)
+                                REFERENCES labor
+                                                );
+
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT schaden_person_fk
+              FOREIGN KEY (person_id)
+                                REFERENCES person
+                                                );
+
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT schaden_transponder_fk
+              FOREIGN KEY (transponder_id)
+                                REFERENCES transponder
+                                                );
+
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT schaden_pfoertner_fk
+              FOREIGN KEY (pfoertner_id)
+                                REFERENCES pfoertner
+                                                );
+
+ALTER TABLE schadensmeldung
+        ADD ( CONSTRAINT bezieht_sich_auf_raum_fk
+              FOREIGN KEY (raum_id)
+                                REFERENCES raum
+                                                );
+
+
+/* MS2 */
+
+SET SERVEROUTPUT ON;
+
+DROP TABLE Ausleihe_Archiv;
+
+CREATE TABLE Ausleihe_Archiv (
+transponder_id INTEGER,
+person_id INTEGER,
+pfoertner_id INTEGER NOT NULL,
+ausgeliehen_von DATE,
+ausgeliehen_bis DATE NOT NULL,
+PRIMARY KEY (transponder_id, person_id, ausgeliehen_von)
+);
+
+
+DROP SEQUENCE reservierung_sec;
+
+CREATE SEQUENCE reservierung_sec
+    INCREMENT BY 1
+    START WITH 1;
+
+
+CREATE OR REPLACE PROCEDURE Ausleihen (p_transponder_id INTEGER, p_person_id INTEGER, p_pfoertner_id INTEGER, sysdate DATE, p_ausgeliehen_bis DATE)
+IS
+  funktionsfaehig INTEGER;
+  geschlossen INTEGER;
+BEGIN
+  SELECT funktionsfaehigkeit INTO funktionsfaehig
+    FROM transponder
+    WHERE transponder_id = p_transponder_id;
+  SELECT gesperrt INTO geschlossen
+    FROM raum NATURAL JOIN kann_oeffnen NATURAL JOIN transponder
+    WHERE transponder_id = p_transponder_id;
+    IF funktionsfaehig = 0
+      THEN
+      DBMS_OUTPUT.PUT_LINE('Ausleihe nicht moeglich! Transponder nicht funktionsfaehig.');
+    ELSIF geschlossen = 1
+      THEN
+      DBMS_OUTPUT.PUT_LINE('Ausleihe nicht moeglich! Raum geschlossen.');
+    ELSE
+      INSERT INTO ausleihe
+      VALUES(p_transponder_id, p_person_id, p_pfoertner_id, sysdate, p_ausgeliehen_bis);
+    END IF;
+  COMMIT;
+END;
+/
+SHOW ERRORS;
+
+
+CREATE OR REPLACE PROCEDURE Reservieren ( p_person_id INTEGER, p_raum_id INTEGER, p_reserviert_von DATE, p_reserviert_bis DATE)
+IS
+  funktionsfaehig INTEGER;
+  geschlossen INTEGER;
+BEGIN
+  SELECT funktionsfaehigkeit INTO funktionsfaehig
+    FROM transponder t, kann_oeffnen k, raum r
+    WHERE t.transponder_id = k.transponder_id AND k.raum_id = r.raum_id;
+  SELECT r.gesperrt INTO geschlossen
+    FROM raum r, kann_oeffnen k, transponder t
+    WHERE p_raum_id = r.raum_id AND r.raum_id = k.raum_id AND k.transponder_id = t.transponder_id;
+    IF funktionsfaehig = 0
+      THEN
+      DBMS_OUTPUT.PUT_LINE('Reservierung nicht moeglich! Transponder nicht funktionsfaehig.');
+    ELSIF geschlossen = 1
+      THEN
+      DBMS_OUTPUT.PUT_LINE('Reservierung nicht moeglich! Raum geschlossen.');
+    ELSE
+      INSERT INTO reservierung
+      VALUES(reservierung_sec.NEXTVAL, p_person_id, p_raum_id, p_reserviert_von, p_reserviert_bis);
+    END IF;
+  COMMIT;
+END;
+/
+SHOW ERRORS;
+
+
+CREATE OR REPLACE TRIGGER Ausleihe_historie AFTER INSERT ON ausleihe FOR EACH ROW
+BEGIN
+    INSERT INTO Ausleihe_Archiv
+        VALUES(:NEW.transponder_id, :NEW.person_id, :NEW.pfoertner_id, :NEW.ausgeliehen_von, :NEW.ausgeliehen_bis);
+END;
+/
+SHOW ERRORS;
+
+
+CREATE OR REPLACE TRIGGER Berechtigung_Ausleihe_pruefen BEFORE INSERT ON ausleihe FOR EACH ROW
+  DECLARE
+    berech_von DATE;
+    berech_bis DATE;
+    braum INTEGER;
+    rraum INTEGER;
+    pperson INTEGER;
+    bperson INTEGER;
+    ktrans INTEGER;
+    kraum INTEGER;
+BEGIN
+    SELECT b.berechtigung_von, b.berechtigung_bis, b.raum_id, r.raum_id, p.person_id, b.person_id, k.transponder_id, k.raum_id INTO berech_von, berech_bis, braum, rraum, pperson, bperson, ktrans, kraum FROM berechtigung b, person p, raum r, kann_oeffnen k
+      WHERE b.berechtigung_von <= sysdate AND b.berechtigung_bis > sysdate AND b.berechtigung_bis >= :NEW.ausgeliehen_bis AND b.raum_id = r.raum_id AND r.raum_id = k.raum_id AND p.person_id = b.person_id AND k.transponder_id = :NEW.transponder_id;
+    EXCEPTION
+      WHEN no_data_found THEN
+      RAISE_APPLICATION_ERROR('-20001', 'Reservierung nicht moeglich! Keine Berechtigung.');
+END;
+/
+SHOW ERRORS;
+
+
+CREATE OR REPLACE TRIGGER Berechtigung_Reservierung_pruefen BEFORE INSERT ON reservierung FOR EACH ROW
+  DECLARE
+    berech_von DATE;
+    berech_bis DATE;
+    braum INTEGER;
+    rraum INTEGER;
+    pperson INTEGER;
+    bperson INTEGER;
+    kraum INTEGER;
+BEGIN
+    SELECT b.berechtigung_von, b.berechtigung_bis, b.raum_id, r.raum_id, p.person_id, b.person_id, k.raum_id INTO berech_von, berech_bis, braum, rraum, pperson, bperson, kraum FROM berechtigung b, person p, raum r, kann_oeffnen k
+      WHERE b.berechtigung_von <= :NEW.reserviert_von AND b.berechtigung_bis >= :NEW.reserviert_bis AND b.raum_id = r.raum_id AND r.raum_id = k.raum_id AND p.person_id = b.person_id;
+    EXCEPTION
+      WHEN no_data_found THEN
+      RAISE_APPLICATION_ERROR('-20001', 'Reservierung nicht moeglich! Keine Berechtigung.');
+END;
+/
+SHOW ERRORS;
+
+
+INSERT INTO transponder VALUES(1, 0); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
+INSERT INTO transponder VALUES(2, 1); /* Ausleihe nicht moeglich! Raum geschlossen. */
+INSERT INTO transponder VALUES(3, 1); /* Ausleihe nicht moeglich! Keine Berechtigung. */
+INSERT INTO transponder VALUES(4, 1); /* Ausleihe moeglich */
+
+INSERT INTO person VALUES(20, 'Mueller', 'Hans', to_date('01.01.1991', 'DD.MM.YYYY'));
+
+INSERT INTO pfoertner VALUES(30, 'Schmitz', 'Fritz', to_date('02.02.1992', 'DD.MM.YYYY'));
+
+INSERT INTO labor VALUES(40, 'DB');
+
+INSERT INTO raum VALUES(1, 1, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
+INSERT INTO raum VALUES(2, 2, '1. OG', 'gebaeudeXY', 40, 1); /* Ausleihe nicht moeglich! Raum geschlossen. */
+INSERT INTO raum VALUES(3, 3, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe nicht moeglich! Keine Berechtigung. */
+INSERT INTO raum VALUES(4, 4, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe moeglich */
+
+INSERT INTO raumverantwortlicher VALUES(20, 'Meier', 'Peter', to_date('03.03.1993', 'DD.MM.YYYY'), 40);
+
+INSERT INTO schadensmeldung VALUES(10, 3, 30, 20, 3, 'Dies ist eine erhebliche Schadensmeldung', 1); /* Ausleihe nicht moeglich! Raum weist erheblichen Schaden auf. */
+
+INSERT INTO kann_oeffnen VALUES(1, 1); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
+INSERT INTO kann_oeffnen VALUES(2, 2); /* Ausleihe nicht moeglich! Raum geschlossen. */
+INSERT INTO kann_oeffnen VALUES(3, 3); /* Ausleihe nicht moeglich! Keine Berechtigung */
+INSERT INTO kann_oeffnen VALUES(4, 4); /* Ausleihe moeglich */
+
+INSERT INTO berechtigung VALUES(20, 20, to_date('01.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 1); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
+INSERT INTO berechtigung VALUES(20, 20, to_date('02.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 2); /* Ausleihe nicht moeglich! Raum weist erheblichen Schaden auf. */
+INSERT INTO berechtigung VALUES(20, 20, to_date('01.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('10.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 3); /* Ausleihe nicht moeglich! Keine Berechtigung. */
+INSERT INTO berechtigung VALUES(20, 20, to_date('04.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe moeglich */
+
+COMMIT;
+
+
+EXECUTE Ausleihen (1, 20, 30, to_date('22.05.2020 21:50', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 23:59', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
+EXECUTE Ausleihen (2, 20, 30, to_date('22.05.2020 21:50', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 23:59', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Raum weist erheblichen Schaden auf. */
+EXECUTE Ausleihen (3, 20, 30, to_date('22.05.2020 21:50', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 23:59', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Keine Berechtigung. */
+EXECUTE Ausleihen (4, 20, 30, to_date('22.05.2020 21:50', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 23:59', 'DD,MM.YYYY HH24:MI')) /* Ausleihe moeglich */
+
+
+SELECT * FROM ausleihe;
+SELECT * FROM Ausleihe_Archiv;
