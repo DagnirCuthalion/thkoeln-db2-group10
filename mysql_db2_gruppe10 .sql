@@ -441,13 +441,13 @@ SELECT * FROM raum;
 SELECT * FROM raumverantwortlicher;
 SELECT * FROM person;
 
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1403, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1402, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1401, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- fehlende berechtigung
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1403, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- falsches labor 
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1402, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- ok
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1401, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- ok
 SELECT * FROM berechtigung;
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-04-01 10:10:10');
-CALL `db2_test`.`proc_raum_reservieren`(2,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-04-01 10:10:10'); -- negative zeit
+CALL `db2_test`.`proc_raum_reservieren`(2,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- gesperrt
 SELECT * FROM reservierung;
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- ok
 SELECT * FROM reservierung;
