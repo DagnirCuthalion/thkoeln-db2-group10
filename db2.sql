@@ -235,6 +235,32 @@ END;
 /
 SHOW ERRORS;
 
+
+
+/*Procedure 3*/
+
+CREATE OR REPLACE PROCEDURE Berechtigen (p_raumverantwortlicher_id INTEGER,p_person_id INTEGER,p_raum_nr INTEGER,p_berechtigung_von DATE,p_berechtigung_bis DATE,p_labor_id INTEGER)
+IS
+    gehoertDazu INTEGER;
+BEGIN
+
+SELECT labor_id INTO gehoertDazu
+FROM raumverantwortlicher
+WHERE raumverantwortlicher_id = p_raumverantwortlicher_id;
+
+IF gehoertDazu = p_labor_id
+THEN
+INSERT INTO berechtigung
+VALUES(p_person_id,p_raumverantwortlicher_id,p_berechtigung_von,p_berechtigung_bis,p_raum_nr);
+END IF;
+COMMIT;
+END;
+/
+show errors;
+
+
+
+
 /* Procedure 4 */
 CREATE OR REPLACE PROCEDURE Reservieren ( p_person_id INTEGER, p_raum_id INTEGER, p_reserviert_von DATE, p_reserviert_bis DATE)
 IS
@@ -410,10 +436,12 @@ INSERT INTO transponder VALUES(6, 1); /* Ausleihe nicht moeglich! Transponder sc
 
 INSERT INTO person VALUES(20, 'Mueller', 'Hans', to_date('01.01.1991', 'DD.MM.YYYY'));
 INSERT INTO person VALUES(50, 'Fritz', 'Jaeger', to_date('08.01.1991', 'DD.MM.YYYY'));
+INSERT INTO person VALUES(70, 'Tobias', 'Adler', to_date('16.01.1991', 'DD.MM.YYYY'));
 
 INSERT INTO pfoertner VALUES(30, 'Schmitz', 'Fritz', to_date('02.02.1992', 'DD.MM.YYYY'));
 
 INSERT INTO labor VALUES(40, 'DB');
+INSERT INTO labor VALUES(30, 'KTN');
 
 INSERT INTO raum VALUES(1, 1, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
 INSERT INTO raum VALUES(2, 2, '1. OG', 'gebaeudeXY', 40, 1); /* Ausleihe nicht moeglich! Raum geschlossen. */
@@ -461,6 +489,10 @@ EXECUTE Ausleihen (4, 50, 30, to_date('25.05.2020 12:00', 'DD,MM.YYYY HH24:MI'))
 
 EXECUTE Reservieren (50, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('25.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
+EXECUTE Berechtigen(20,50,3,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
+EXECUTE Berechtigen(20,70,2,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
+
+SELECT * FROM berechtigung;
 
 SELECT * FROM ausleihe;
 SELECT * FROM Ausleihe_Archiv;
