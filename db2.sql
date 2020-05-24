@@ -285,7 +285,7 @@ CREATE OR REPLACE TRIGGER Berechtigung_Ausleihe_pruefen BEFORE INSERT ON ausleih
     kraum INTEGER;
 BEGIN
     SELECT b.berechtigung_von, b.berechtigung_bis, b.raum_id, r.raum_id, p.person_id, b.person_id, k.transponder_id, k.raum_id INTO berech_von, berech_bis, braum, rraum, pperson, bperson, ktrans, kraum FROM berechtigung b, person p, raum r, kann_oeffnen k
-      WHERE b.berechtigung_von <= sysdate AND b.berechtigung_bis > sysdate AND b.berechtigung_bis >= :NEW.ausgeliehen_bis AND b.raum_id = r.raum_id AND r.raum_id = k.raum_id AND p.person_id = b.person_id AND k.transponder_id = :NEW.transponder_id;
+      WHERE b.berechtigung_von <= sysdate AND b.berechtigung_bis > sysdate AND b.berechtigung_bis >= :NEW.ausgeliehen_bis AND b.raum_id = r.raum_id AND r.raum_id = k.raum_id AND p.person_id = b.person_id AND k.transponder_id = :NEW.transponder_id AND p.person_id = :NEW.person_id;
     EXCEPTION
       WHEN no_data_found THEN
       RAISE_APPLICATION_ERROR('-20001', 'Ausleihe nicht moeglich! Keine Berechtigung.');
@@ -294,7 +294,10 @@ END;
 SHOW ERRORS;
 
 /* Trigger 1 Reservierung*/
-/*CREATE OR REPLACE TRIGGER Berechtigung_Reservierung_pruefen BEFORE INSERT ON reservierung FOR EACH ROW
+
+
+
+CREATE OR REPLACE TRIGGER Berechtigung_Reservierung_pruefen BEFORE INSERT ON reservierung FOR EACH ROW
   DECLARE
     berech_von DATE;
     berech_bis DATE;
@@ -307,7 +310,7 @@ SHOW ERRORS;
     trans_id varchar2(100);
 
     cursor abc is SELECT b.berechtigung_von, b.berechtigung_bis, b.raum_id as braum, r.raum_id as rraum, p.person_id as pperson, b.person_id as bperson, k.raum_id as kraum INTO berech_von, berech_bis, braum, rraum, pperson, bperson, kraum FROM berechtigung b, person p, raum r, kann_oeffnen k
-      WHERE berech_von <= :NEW.reserviert_von AND berech_bis >= :NEW.reserviert_bis AND braum = rraum AND rraum = kraum AND pperson = bperson AND :NEW.person_id = pperson AND :NEW.raum_id = rraum;
+      WHERE b.berechtigung_von <= :NEW.reserviert_von AND b.berechtigung_bis >= :NEW.reserviert_bis AND b.raum_id = r.raum_id AND r.raum_id = k.raum_id AND p.person_id = b.person_id AND :NEW.person_id = p.person_id AND :NEW.raum_id = r.raum_id;
 
 BEGIN
 
@@ -324,10 +327,11 @@ for item in abc
       RAISE_APPLICATION_ERROR('-20002', 'Reservierung nicht moeglich! Keine Berechtigung.');
 END;
 /
-SHOW ERRORS;*/
+SHOW ERRORS;
 
 /* Trigger 2 Ausleihe*/
-/*CREATE OR REPLACE TRIGGER Zeitraum_Ausleihe_pruefen BEFORE INSERT ON ausleihe FOR EACH ROW
+/*
+CREATE OR REPLACE TRIGGER Zeitraum_Ausleihe_pruefen BEFORE INSERT ON ausleihe FOR EACH ROW
   DECLARE
     trans_id integer;
     cursor abc is SELECT reservierung_id  into trans_id FROM reservierung r, raum a, kann_oeffnen k, transponder t, person p WHERE p.person_id != r.person_id AND t.transponder_id = :NEW.transponder_id AND t.transponder_id = k.transponder_id AND k.raum_id = a.raum_id AND r.raum_id = a.raum_id AND ((r.reserviert_von < :NEW.ausgeliehen_von AND r.reserviert_bis > :NEW.ausgeliehen_bis)
@@ -356,7 +360,7 @@ BEGIN
 
 END;
 /
-SHOW ERRORS;*/
+SHOW ERRORS; */
 
 
 INSERT INTO transponder VALUES(1, 0); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
@@ -393,7 +397,7 @@ INSERT INTO berechtigung VALUES(20, 20, to_date('02.05.2020 09:00', 'DD.MM.YYYY 
 INSERT INTO berechtigung VALUES(20, 20, to_date('01.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('10.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 3); /* Ausleihe nicht moeglich! Keine Berechtigung. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('05.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 5); /* Ausleihe darf nicht laenger als einen Tag sein. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('04.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe moeglich */
---INSERT INTO berechtigung VALUES(50, 20, to_date('06.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
+INSERT INTO berechtigung VALUES(50, 20, to_date('06.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 COMMIT;
 
@@ -408,7 +412,7 @@ EXECUTE Ausleihen (2, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'))
 EXECUTE Ausleihen (3, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Keine Berechtigung. */
 /*EXECUTE Ausleihen (5, 20, 30, to_date('24.05.2020 08:00', 'DD,MM.YYYY HH24:MI'))*/ /* Ausleihe darf nicht laenger als einen Tag sein. */
 EXECUTE Ausleihen (4, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe moeglich */
-/*EXECUTE Ausleihen (4, 50, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'))*/ /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
+EXECUTE Ausleihen (4, 50, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 
 
