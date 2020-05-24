@@ -313,12 +313,11 @@ END;
 /
 SHOW ERRORS;
 
-/* Trigger 2 Ausleihe*/
+/* Trigger 2 Ausleihe */
 CREATE OR REPLACE TRIGGER Zeitraum_Ausleihe_pruefen BEFORE INSERT ON ausleihe FOR EACH ROW
   DECLARE
-    trans_id integer;
-
-
+    trans_id INTEGER;
+    trans_id2 INTEGER;
 BEGIN
 
 IF :NEW.ausgeliehen_von + 1 < :NEW.ausgeliehen_bis
@@ -326,23 +325,77 @@ IF :NEW.ausgeliehen_von + 1 < :NEW.ausgeliehen_bis
       RAISE_APPLICATION_ERROR('-20003', 'Ausleihe darf nicht laenger als einen Tag sein.');
     END IF;
 
-select case
-when exists(
-SELECT reservierung_id  FROM reservierung r, raum a, kann_oeffnen k, transponder t, person p WHERE p.person_id != r.person_id AND t.transponder_id = :NEW.transponder_id AND t.transponder_id = k.transponder_id AND k.raum_id = a.raum_id AND r.raum_id = a.raum_id AND ((r.reserviert_von < :NEW.ausgeliehen_von AND r.reserviert_bis > :NEW.ausgeliehen_bis)
-            OR (r.reserviert_von < :NEW.ausgeliehen_bis AND r.reserviert_bis > :NEW.ausgeliehen_bis)))
-then 1
-else 0
-end into trans_id
-from dual;
+SELECT CASE
+WHEN EXISTS(
+    SELECT reservierung_id  FROM reservierung r, raum a, kann_oeffnen k, transponder t, person p WHERE p.person_id != r.person_id AND t.transponder_id = :NEW.transponder_id AND t.transponder_id = k.transponder_id AND k.raum_id = a.raum_id AND r.raum_id = a.raum_id AND ((r.reserviert_von <= :NEW.ausgeliehen_von AND r.reserviert_bis >= :NEW.ausgeliehen_bis)
+            OR (r.reserviert_von <= :NEW.ausgeliehen_bis AND r.reserviert_bis >= :NEW.ausgeliehen_bis)))
+    THEN 1
+    ELSE 0
+    END INTO trans_id
+    FROM dual;
 
-
-    if trans_id = 1
-    then
-            DBMS_OUTPUT.PUT_LINE('1.');
-            else DBMS_OUTPUT.PUT_LINE('0');
-
+SELECT CASE
+WHEN EXISTS(
+SELECT * FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = :new.transponder_id AND (a.ausgeliehen_von <= :new.ausgeliehen_von AND a.ausgeliehen_bis >= :new.ausgeliehen_von)
+                OR (a.ausgeliehen_von <= :new.ausgeliehen_bis AND a.ausgeliehen_bis >= :new.ausgeliehen_bis)))
+    THEN 1
+    ELSE 0
+    END INTO trans_id2
+    FROM dual;
+    IF trans_id = 1 OR trans_id2 = 1
+    THEN
+        RAISE_APPLICATION_ERROR('-20004', 'Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert');
     END IF;
+END;
+/
+SHOW ERRORS;
 
+
+/* Trigger 2 Ausleihe*/
+CREATE OR REPLACE TRIGGER Zeitraum_Reservierung_pruefen BEFORE INSERT ON reservierung FOR EACH ROW
+  DECLARE
+    trans_id INTEGER;
+    trans_id2 INTEGER;
+BEGIN
+
+SELECT CASE
+WHEN EXISTS(
+    SELECT reservierung_id  FROM reservierung r, raum a, kann_oeffnen k, transponder t, person p WHERE p.person_id != r.person_id AND /*t.transponder_id = :NEW.transponder_id AND*/ t.transponder_id = k.transponder_id AND k.raum_id = a.raum_id AND r.raum_id = a.raum_id AND ((r.reserviert_von <= :NEW.reserviert_von AND r.reserviert_bis >= :NEW.reserviert_bis)
+            OR (r.reserviert_von <= :NEW.reserviert_bis AND r.reserviert_bis >= :NEW.reserviert_bis)))
+    THEN 1
+    ELSE 0
+    END INTO trans_id
+    FROM dual;
+
+SELECT CASE
+WHEN EXISTS(
+SELECT * FROM ausleihe a, kann_oeffnen k WHERE (k.transponder_id = a.transponder_id/*a.transponder_id = :new.transponder_id*/ AND (a.ausgeliehen_von <= :new.reserviert_von AND a.ausgeliehen_bis >= :new.reserviert_von)
+                OR (a.ausgeliehen_von <= :new.reserviert_bis AND a.ausgeliehen_bis >= :new.reserviert_bis)))
+    THEN 1
+    ELSE 0
+    END INTO trans_id2
+    FROM dual;
+    IF trans_id = 1 OR trans_id2 = 1
+    THEN
+        RAISE_APPLICATION_ERROR('-20004', 'Reservierung nicht moeglich! Transponder schon ausgeliehen oder reserviert');
+    END IF;
+END;
+/
+SHOW ERRORS;
+
+
+/* Trigger 6 */
+CREATE OR REPLACE TRIGGER Schadensmeldung_pruefen AFTER INSERT ON schadensmeldung FOR EACH ROW
+  DECLARE
+    schaden INTEGER;
+    ges INTEGER;
+BEGIN
+  SELECT erheblicher_schaden, gesperrt INTO schaden, ges FROM schadensmeldung s, raum r WHERE :NEW.schadensmeldung_id = s.schadensmeldung_id AND r.raum_id = s.raum_id;
+
+    IF
+      schaden = 1
+      THEN ges := 1;
+    END IF;
 END;
 /
 SHOW ERRORS;
@@ -353,6 +406,7 @@ INSERT INTO transponder VALUES(2, 1); /* Ausleihe nicht moeglich! Raum geschloss
 INSERT INTO transponder VALUES(3, 1); /* Ausleihe nicht moeglich! Keine Berechtigung. */
 INSERT INTO transponder VALUES(5, 1); /* Ausleihe darf nicht laenger als einen Tag sein. */
 INSERT INTO transponder VALUES(4, 1); /* Ausleihe moeglich */
+INSERT INTO transponder VALUES(6, 1); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 INSERT INTO person VALUES(20, 'Mueller', 'Hans', to_date('01.01.1991', 'DD.MM.YYYY'));
 INSERT INTO person VALUES(50, 'Fritz', 'Jaeger', to_date('08.01.1991', 'DD.MM.YYYY'));
@@ -366,6 +420,7 @@ INSERT INTO raum VALUES(2, 2, '1. OG', 'gebaeudeXY', 40, 1); /* Ausleihe nicht m
 INSERT INTO raum VALUES(3, 3, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe nicht moeglich! Keine Berechtigung. */
 INSERT INTO raum VALUES(5, 5, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe darf nicht laenger als einen Tag sein. */
 INSERT INTO raum VALUES(4, 4, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe moeglich */
+INSERT INTO raum VALUES(6, 6, '1. OG', 'gebaeudeXY', 40, 0); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 INSERT INTO raumverantwortlicher VALUES(20, 'Meier', 'Peter', to_date('03.03.1993', 'DD.MM.YYYY'), 40);
 
@@ -376,13 +431,17 @@ INSERT INTO kann_oeffnen VALUES(2, 2); /* Ausleihe nicht moeglich! Raum geschlos
 INSERT INTO kann_oeffnen VALUES(3, 3); /* Ausleihe nicht moeglich! Keine Berechtigung */
 INSERT INTO kann_oeffnen VALUES(5, 5); /* Ausleihe darf nicht laenger als einen Tag sein. */
 INSERT INTO kann_oeffnen VALUES(4, 4); /* Ausleihe moeglich */
+INSERT INTO kann_oeffnen VALUES(6, 6); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 INSERT INTO berechtigung VALUES(20, 20, to_date('01.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 1); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('02.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 2); /* Ausleihe nicht moeglich! Raum geschlossen. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('01.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('10.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 3); /* Ausleihe nicht moeglich! Keine Berechtigung. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('05.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 5); /* Ausleihe darf nicht laenger als einen Tag sein. */
 INSERT INTO berechtigung VALUES(20, 20, to_date('04.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe moeglich */
+INSERT INTO berechtigung VALUES(20, 20, to_date('04.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 6); /* Ausleihe moeglich */
+INSERT INTO berechtigung VALUES(50, 20, to_date('06.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 6); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 INSERT INTO berechtigung VALUES(50, 20, to_date('06.05.2020 09:00', 'DD.MM.YYYY HH24:MI'), to_date('30.05.2020 12:00', 'DD,MM.YYYY HH24:MI'), 4); /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
+
 
 COMMIT;
 
@@ -391,14 +450,16 @@ EXECUTE Reservieren (20, 1, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), t
 EXECUTE Reservieren (20, 2, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung nicht moeglich! Raum geschlossen. */
 EXECUTE Reservieren (20, 3, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung nicht moeglich! Keine Berechtigung. */
 EXECUTE Reservieren (20, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung moeglich */
+EXECUTE Reservieren (20, 6, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('28.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung moeglich */ /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 EXECUTE Ausleihen (1, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
 EXECUTE Ausleihen (2, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Raum geschlossen. */
 EXECUTE Ausleihen (3, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Keine Berechtigung. */
 EXECUTE Ausleihen (5, 20, 30, to_date('28.05.2020 08:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe darf nicht laenger als einen Tag sein. */
-EXECUTE Ausleihen (4, 20, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe moeglich */
-EXECUTE Ausleihen (4, 50, 30, to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
+EXECUTE Ausleihen (4, 20, 30, to_date('25.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe moeglich */
+EXECUTE Ausleihen (4, 50, 30, to_date('25.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Ausleihe nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
+EXECUTE Reservieren (50, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('25.05.2020 12:00', 'DD,MM.YYYY HH24:MI')) /* Reservierung nicht moeglich! Transponder schon ausgeliehen oder reserviert */
 
 
 SELECT * FROM ausleihe;
