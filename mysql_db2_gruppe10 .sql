@@ -122,12 +122,12 @@ ALTER TABLE ausleihe
 ALTER TABLE ausleihe
         ADD ( CONSTRAINT vergibt_transponder_fk
               FOREIGN KEY (pfoertner_person_id)
-                                REFERENCES pfoertner(pfoertner_person_id) ON DELETE CASCADE
+                                REFERENCES pfoertner(pfoertner_person_id)
                                                 );                                                   
 ALTER TABLE ausleihe
         ADD ( CONSTRAINT leiht_aus_fk
               FOREIGN KEY (person_person_id)
-                                REFERENCES person(person_person_id) ON DELETE CASCADE
+                                REFERENCES person(person_person_id)
                                                 );  											
 ALTER TABLE berechtigung
         ADD ( CONSTRAINT vergibt_berechtigung_fk
@@ -152,37 +152,37 @@ ALTER TABLE reservierung
 ALTER TABLE raum
         ADD ( CONSTRAINT teil_von_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE CASCADE
+                                REFERENCES labor(labor_id)
                                                 );     
 ALTER TABLE raumverantwortlicher
         ADD ( CONSTRAINT gehoert_zu_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE CASCADE
+                                REFERENCES labor(labor_id)
                                                 ); 
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_transponder_fk
               FOREIGN KEY (transponder_id)
-                                REFERENCES ausleihe(transponder_id) ON DELETE CASCADE
+                                REFERENCES ausleihe(transponder_id)
                                                 );
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_person_fk
               FOREIGN KEY (person_person_id)
-                                REFERENCES ausleihe(person_person_id) ON DELETE CASCADE
+                                REFERENCES ausleihe(person_person_id)
                                                 );  
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_pfoerter_fk
               FOREIGN KEY (pfoertner_person_id)
-                                REFERENCES ausleihe(pfoertner_person_id) ON DELETE CASCADE
+                                REFERENCES ausleihe(pfoertner_person_id)
                                                 );
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_raum_fk
               FOREIGN KEY (raum_id)
-                                REFERENCES raum(raum_id) ON DELETE CASCADE
+                                REFERENCES raum(raum_id)
                                                 );  
 ALTER TABLE person
         ADD ( CONSTRAINT gehoert_an_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE CASCADE
+                                REFERENCES labor(labor_id) ON DELETE SET NULL
                                                 );                                                
 
 -- notification function
@@ -298,11 +298,10 @@ BEGIN
     (
         SELECT * 
         FROM berechtigung b, raum r, kann_oeffnen k
-        WHERE b.berechtigung_bis > current_timestamp() AND b.raum_nr = r.raum_nr 
-        AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id
-		AND NOT k.transponder_id != new.transponder_id
+        WHERE b.berechtigung_bis > current_timestamp() AND b.berechtigung_von <= current_timestamp() AND  b.raum_nr = r.raum_nr 
+        AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id AND new.person_id = b.person_id
 	) THEN
-		SIGNAL SQLSTATE '45006' SET MESSAGE_TEXT = 'Berechtigung nicht mehr gueltig' , MYSQL_ERRNO = 1006;
+		SIGNAL SQLSTATE '45006' SET MESSAGE_TEXT = 'Berechtigung noch nicht/nicht mehr gueltig' , MYSQL_ERRNO = 1006;
     END IF;
 END $$
 DELIMITER ;
