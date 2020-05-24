@@ -266,6 +266,18 @@ END;
 SHOW ERRORS;
 
 
+/* Procedure 2 */
+CREATE OR REPLACE PROCEDURE Transponder_zurueckgeben (p_transponder_id INTEGER, p_person_id INTEGER, p_erheblicher_Schaden INTEGER)
+IS
+raumverantwortlicher INTEGER;
+
+BEGIN
+  UPDATE ausleihe SET ausgeliehen_bis = sysdate WHERE transponder_id = p_transponder_id AND person_id = p_person_id;
+END;
+/
+SHOW ERRORS;
+
+
 /*Procedure 3*/
 
 CREATE OR REPLACE PROCEDURE Berechtigen (p_raumverantwortlicher_id INTEGER,p_person_id INTEGER,p_raum_nr INTEGER,p_berechtigung_von DATE,p_berechtigung_bis DATE,p_labor_id INTEGER)
@@ -487,6 +499,7 @@ end if;
 END;
 /
 SHOW ERRORS;
+<<<<<<< HEAD:db2.sql
 
 
 
@@ -562,3 +575,5 @@ SELECT * FROM ausleihe;
 SELECT * FROM Ausleihe_Archiv;
 SELECT * FROM reservierung;
 SELECT * FROM view_berechtigte;
+=======
+>>>>>>> 9d9dfd877d4e21100495b492b5ad25b2a844627b:Oracle.sql

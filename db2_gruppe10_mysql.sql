@@ -152,12 +152,12 @@ ALTER TABLE reservierung
 ALTER TABLE raum
         ADD ( CONSTRAINT teil_von_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE SET NULL
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 );     
 ALTER TABLE raumverantwortlicher
         ADD ( CONSTRAINT gehoert_zu_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id)
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 ); 
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_transponder_fk
@@ -182,7 +182,7 @@ ALTER TABLE schadensmeldung
 ALTER TABLE person
         ADD ( CONSTRAINT gehoert_an_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id)
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 );                                                
 
 -- notification function
@@ -200,32 +200,32 @@ BEGIN
         AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id
 	)
 	THEN
-		IF(SELECT gesperrt 
+		IF EXISTS (SELECT *
 		FROM berechtigung b, kann_oeffnen k, raum r 
         WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr 
-        AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id=FALSE) THEN
+        AND k.raum_id = r.raum_id AND k.transponder_id = p_transponder_id AND r.gesperrt=false) THEN
 			IF EXISTS(SELECT * FROM transponder t WHERE t.transponder_id = p_transponder_id AND t.funktionsfaehigkeit = TRUE)  THEN
 			-- ausgeliehen
-				IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis > current_timestamp() OR a.ausgeliehen_bis=NULL)) THEN
+				IF NOT EXISTS (SELECT * FROM ausleihe a WHERE a.transponder_id = p_transponder_id AND (a.ausgeliehen_bis >= current_timestamp() OR a.ausgeliehen_bis=NULL)) THEN
 					-- berechtigender bestimmen
                 
 					-- alles in ausleihe einfügen
-					INSERT INTO ausleihe
-					VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, ausgeliehen_von = current_timestamp(), p_ausgeliehen_bis);
+					INSERT INTO ausleihe (transponder_id, person_person_id, pfoertner_person_id, ausgeliehen_von, ausgeliehen_bis)
+					VALUES (p_transponder_id, p_person_id, p_pfoertner_person_id, current_timestamp(), p_ausgeliehen_bis);
 				ELSE
 					SIGNAL SQLSTATE '45002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1002;
 				END IF;
+			ELSE
 			SIGNAL SQLSTATE '45007' SET MESSAGE_TEXT = 'Transponder defekt', MYSQL_ERRNO = 1007;
 			END IF;
 		ELSE
 			SIGNAL SQLSTATE '45009' SET MESSAGE_TEXT = 'Raum gesperrt', MYSQL_ERRNO = 1009;
         END IF;
+	ELSE
 	SIGNAL SQLSTATE '45008' SET MESSAGE_TEXT = 'Fehlende Berechtigung', MYSQL_ERRNO = 1008;
 	END IF;
 END $$
 DELIMITER ;
-
-    
 
 -- proc2
 DROP PROCEDURE IF EXISTS proc_transponder_zurueckgeben;
@@ -239,6 +239,7 @@ BEGIN
 		WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id 
 		AND a.ausgeliehen_von = (SELECT MAX(ausgeliehen_von) FROM ausleihe a WHERE a.person_person_id = p_person_id AND a.transponder_id = p_transponder_id);
     ELSE 
+		-- DELETE FROM berechtigung b WHERE b.person_id = ;
 		SIGNAL SQLSTATE '45010' SET MESSAGE_TEXT = 'Schadensmeldung vorliegend', MYSQL_ERRNO = 1010;
 	END IF;
 END $$
@@ -299,7 +300,7 @@ BEGIN
     (
         SELECT * 
         FROM berechtigung b, raum r, kann_oeffnen k
-        WHERE b.berechtigung_bis > current_timestamp() AND b.berechtigung_von <= current_timestamp() AND  b.raum_nr = r.raum_nr 
+        WHERE b.berechtigung_bis >= current_timestamp() AND b.berechtigung_von <= current_timestamp() AND  b.raum_nr = r.raum_nr 
         AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id AND new.person_person_id = b.person_id
 	) THEN
 		SIGNAL SQLSTATE '45006' SET MESSAGE_TEXT = 'Berechtigung noch nicht/nicht mehr gueltig' , MYSQL_ERRNO = 1006;
@@ -316,22 +317,17 @@ BEFORE INSERT
 ON ausleihe
 FOR EACH ROW
 BEGIN
-	IF( DATEDIFF(new.ausgeliehen_von, new.ausgeliehen_bis) > 1) THEN
-		CALL proc_transponder_ausleihen(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis-1);
-        SIGNAL SQLSTATE '45003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag ausgeliehen werden', MYSQL_ERRNO = 1003;
-	END IF;
-    IF EXISTS ( SELECT count(*) FROM reservierung r WHERE (r.transponder_id = new.transponder_id AND (r.reserviert_von < new.ausgeliehen_von AND r.reserviert_bis > new.ausgeliehen_von) 
-				OR (r.reserviert_von < new.ausgeliehen_bis AND r.reserviert_bis > new.ausgeliehen_bis)) ) THEN
+    IF EXISTS ( SELECT * FROM reservierung r, kann_oeffnen k WHERE (r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id AND (r.reserviert_von <= new.ausgeliehen_von AND r.reserviert_bis >= new.ausgeliehen_von) 
+				OR (r.reserviert_von <= new.ausgeliehen_bis AND r.reserviert_bis >= new.ausgeliehen_bis)) ) THEN
 			-- SELECT MAX(r.reserviert_bis) as 'Alternativtermin zur Ausleihe' FROM reservierung r WHERE r.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '45001' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits reserviert', MYSQL_ERRNO = 1001;
-		ELSE IF EXISTS ( SELECT COUNT(*) FROM ausleihe a WHERE (a.transponder_id = new.transponder_id AND (a.ausgeliehen_von < new.ausgeliehen_von AND a.ausgeliehen_bis > new.ausgeliehen_von) 
-				OR (a.ausgeliehen_von < new.ausgeliehen_bis AND a.ausgeliehen_bis > new.ausgeliehen_bis)) ) THEN
+	ELSE 
+		IF EXISTS ( SELECT * FROM ausleihe a WHERE (a.transponder_id = new.transponder_id AND (a.ausgeliehen_von <= new.ausgeliehen_von AND a.ausgeliehen_bis >= new.ausgeliehen_von) 
+				OR (a.ausgeliehen_von <= new.ausgeliehen_bis AND a.ausgeliehen_bis >= new.ausgeliehen_bis)) ) THEN
 			-- SELECT MAX(a.ausgeliehen_bis) as 'Alternativtermin zur Ausleihe' FROM ausleihe a WHERE a.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '45002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1002;
 		END IF;
-    END IF;
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'An error occurred', MYSQL_ERRNO = 1000;
+	END IF;
 END $$
 DELIMITER ;
 
@@ -342,16 +338,12 @@ BEFORE INSERT
 ON reservierung
 FOR EACH ROW
 BEGIN
-	IF( DATEDIFF(new.reserviert_von, new.reserviert_bis) > 1) THEN
-		-- CALL proc_raum_reservieren(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1);
-        SIGNAL SQLSTATE '46003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag resverviert werden', MYSQL_ERRNO = 1103;
-	END IF;
-    IF EXISTS ( SELECT * FROM reservierung r, kann_oeffnen k WHERE (r.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
-				OR (r.reserviert_von < new.reserviert_bis AND r.reserviert_bis > new.reserviert_bis)) ) THEN
+    IF EXISTS ( SELECT * FROM reservierung r, kann_oeffnen k WHERE (r.person_id != new.person_id AND r.raum_id = new.raum_id AND (r.reserviert_von <= new.reserviert_von AND r.reserviert_bis >= new.reserviert_von) 
+				OR (r.reserviert_von <= new.reserviert_bis AND r.reserviert_bis >= new.reserviert_bis)) ) THEN
 			-- SELECT MAX(r.reserviert_bis) as 'Alternativtermin zur Ausleihe' FROM reservierung r WHERE r.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '46001' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits reserviert', MYSQL_ERRNO = 1101;
-		ELSE IF EXISTS ( SELECT * FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (a.ausgeliehen_von < new.reserviert_von AND a.ausgeliehen_bis > new.reserviert_von) 
-				OR (a.ausgeliehen_von < new.reserviert_bis AND a.ausgeliehen_bis > new.reserviert_bis)) ) THEN
+		ELSE IF EXISTS ( SELECT * FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (a.ausgeliehen_von <= new.reserviert_von AND a.ausgeliehen_bis >= new.reserviert_von) 
+				OR (a.ausgeliehen_von <= new.reserviert_bis AND a.ausgeliehen_bis >= new.reserviert_bis)) ) THEN
 			-- SELECT MAX(a.ausgeliehen_bis) as 'Alternativtermin zur Ausleihe' FROM ausleihe a WHERE a.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '46002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1102;
 		END IF;
@@ -419,7 +411,7 @@ SET @trg_delete_records_active=1;
 -- view
 CREATE OR REPLACE VIEW view_berechtigte 
 AS 
-	SELECT p.person_person_id person_id, p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id 
+	SELECT p.person_person_id person_id, p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id
 	FROM berechtigung b, person p, ausleihe a, raumverantwortlicher r, transponder t, kann_oeffnen k
     WHERE ((r.raumverantworlicher_person_id = 1)
     AND r.raumverantworlicher_person_id = b.raumverantwortlicher_id
@@ -427,27 +419,3 @@ AS
     AND p.person_person_id = a.person_person_id
     AND a.transponder_id = t.transponder_id
     AND t.transponder_id = k.transponder_id);
-    
--- tests
-INSERT INTO labor (labor_name) VALUES ('Irgeneinname');
-INSERT INTO labor (labor_name) VALUES ('Irgeneinname2');
-INSERT INTO person (labor_id,nachname,vorname,geburtsdatum) VALUES (1,'Müller','Max',current_timestamp());
-INSERT INTO person (labor_id,nachname,vorname,geburtsdatum) VALUES (1,'Raumver1','Rolf',current_timestamp());
-INSERT INTO raumverantwortlicher (nachname,vorname,geburtsdatum, labor_id) VALUES ('Raumver1','Rolf',current_timestamp(),1);
-INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1401,1,false);
-INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1402,1,true);
-INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1403,2,false);
-SELECT * FROM raum;
-SELECT * FROM raumverantwortlicher;
-SELECT * FROM person;
-
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- fehlende berechtigung
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1403, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- falsches labor 
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1402, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- ok
-CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1401, '2020-04-01 10:10:10', '2020-06-01 10:10:10'); -- ok
-SELECT * FROM berechtigung;
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-04-01 10:10:10'); -- negative zeit
-CALL `db2_test`.`proc_raum_reservieren`(2,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- gesperrt
-SELECT * FROM reservierung;
-CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10'); -- ok
-SELECT * FROM reservierung;
