@@ -236,29 +236,26 @@ END;
 SHOW ERRORS;
 
 
-
 /*Procedure 3*/
 
 CREATE OR REPLACE PROCEDURE Berechtigen (p_raumverantwortlicher_id INTEGER,p_person_id INTEGER,p_raum_nr INTEGER,p_berechtigung_von DATE,p_berechtigung_bis DATE,p_labor_id INTEGER)
-IS
+  IS
     gehoertDazu INTEGER;
 BEGIN
 
-SELECT labor_id INTO gehoertDazu
-FROM raumverantwortlicher
-WHERE raumverantwortlicher_id = p_raumverantwortlicher_id;
+  SELECT labor_id INTO gehoertDazu
+  FROM raumverantwortlicher
+  WHERE raumverantwortlicher_id = p_raumverantwortlicher_id;
 
-IF gehoertDazu = p_labor_id
-THEN
-INSERT INTO berechtigung
-VALUES(p_person_id,p_raumverantwortlicher_id,p_berechtigung_von,p_berechtigung_bis,p_raum_nr);
-END IF;
+  IF gehoertDazu = p_labor_id
+    THEN
+    INSERT INTO berechtigung
+    VALUES(p_person_id,p_raumverantwortlicher_id,p_berechtigung_von,p_berechtigung_bis,p_raum_nr);
+  END IF;
 COMMIT;
 END;
 /
 show errors;
-
-
 
 
 /* Procedure 4 */
@@ -427,6 +424,42 @@ END;
 SHOW ERRORS;
 
 
+/* View */
+CREATE OR REPLACE VIEW view_berechtigte
+AS
+    SELECT p.person_id , p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id
+    FROM berechtigung b, person p, ausleihe a, raumverantwortlicher r, transponder t, kann_oeffnen k
+    WHERE ((r.RAUMVERANTWORTLICHER_ID = 1)
+    AND r.RAUMVERANTWORTLICHER_ID = b.raumverantwortlicher_id
+    AND b.person_id = p.person_id
+    AND p.person_id = a.person_id
+    AND a.transponder_id = t.transponder_id
+    AND t.transponder_id = k.transponder_id);
+
+CREATE OR REPLACE TRIGGER instead_of_delete
+INSTEAD OF DELETE ON view_berechtigte
+FOR EACH ROW
+DECLARE exist INTEGER;
+        name VARCHAR2 (45);
+        t_id INTEGER(9);
+BEGIN
+    select case when exists(SELECT MAX(p.nachname),MAX(p.vorname), MAX(a.transponder_id) FROM ausleihe a, person p WHERE a.person_id = :OLD.person_id and a.person_id = p.person_id)
+            then 1
+            else 0
+            end
+    into exist
+    from dual;
+
+if(exist = 1) then
+     DBMS_OUTPUT.PUT_LINE('Person hat Transponder noch in Besitz, dieser muss vom Hausmeister nun aquiriert werden');
+end if;
+
+END;
+/
+SHOW ERRORS;
+
+
+
 INSERT INTO transponder VALUES(1, 0); /* Ausleihe nicht moeglich! Transponder nicht funktionsfaehig. */
 INSERT INTO transponder VALUES(2, 1); /* Ausleihe nicht moeglich! Raum geschlossen. */
 INSERT INTO transponder VALUES(3, 1); /* Ausleihe nicht moeglich! Keine Berechtigung. */
@@ -492,9 +525,12 @@ EXECUTE Reservieren (50, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), t
 EXECUTE Berechtigen(20,50,3,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
 EXECUTE Berechtigen(20,70,2,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
 
+
 SELECT * FROM berechtigung;
 
 SELECT * FROM ausleihe;
 SELECT * FROM Ausleihe_Archiv;
 
 SELECT * FROM reservierung;
+
+SELECT * FROM view_berechtigte;
