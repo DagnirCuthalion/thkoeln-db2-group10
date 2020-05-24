@@ -152,12 +152,12 @@ ALTER TABLE reservierung
 ALTER TABLE raum
         ADD ( CONSTRAINT teil_von_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE SET NULL
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 );     
 ALTER TABLE raumverantwortlicher
         ADD ( CONSTRAINT gehoert_zu_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id)
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 ); 
 ALTER TABLE schadensmeldung
         ADD ( CONSTRAINT bezieht_sich_auf_transponder_fk
@@ -182,7 +182,7 @@ ALTER TABLE schadensmeldung
 ALTER TABLE person
         ADD ( CONSTRAINT gehoert_an_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id)
+                                REFERENCES labor(labor_id) ON DELETE CASCADE
                                                 );                                                
 
 -- notification function
