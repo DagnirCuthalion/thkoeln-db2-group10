@@ -36,10 +36,6 @@ CALL `db2_test`.`proc_transponder_ausleihen`(1, 1, 1, current_timestamp()); -- b
 SELECT * FROM ausleihe;
 SELECT * FROM reservierung;
 CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-26 11:10:10', '2020-05-30 19:10:10'); -- ok
-
-SELECT * FROM reservierung r, kann_oeffnen k WHERE (r.raum_id = k.raum_id AND k.transponder_id = 1 AND ((r.reserviert_von <= current_timestamp() AND r.reserviert_bis >= current_timestamp()) 
-				OR (r.reserviert_von <= '2020-05-29 12:00:00' AND r.reserviert_bis >= '2020-05-29 12:00:00')));
-
 CALL `db2_test`.`proc_transponder_ausleihen`(1, 1, 1, '2020-05-29 12:00:00'); -- bereits reserviert
 SELECT * FROM reservierung;
 INSERT INTO schadensmeldung (transponder_id,person_person_id,pfoertner_person_id,raum_id,meldung) VALUES (1,1,1,1,'test');
