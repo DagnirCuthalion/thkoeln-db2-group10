@@ -152,7 +152,7 @@ ALTER TABLE reservierung
 ALTER TABLE raum
         ADD ( CONSTRAINT teil_von_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id)
+                                REFERENCES labor(labor_id) ON DELETE SET NULL
                                                 );     
 ALTER TABLE raumverantwortlicher
         ADD ( CONSTRAINT gehoert_zu_fk
@@ -182,7 +182,7 @@ ALTER TABLE schadensmeldung
 ALTER TABLE person
         ADD ( CONSTRAINT gehoert_an_fk
               FOREIGN KEY (labor_id)
-                                REFERENCES labor(labor_id) ON DELETE SET NULL
+                                REFERENCES labor(labor_id)
                                                 );                                                
 
 -- notification function
@@ -299,7 +299,7 @@ BEGIN
         SELECT * 
         FROM berechtigung b, raum r, kann_oeffnen k
         WHERE b.berechtigung_bis > current_timestamp() AND b.berechtigung_von <= current_timestamp() AND  b.raum_nr = r.raum_nr 
-        AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id AND new.person_id = b.person_id
+        AND r.raum_id = k.raum_id AND k.transponder_id = new.transponder_id AND new.person_person_id = b.person_id
 	) THEN
 		SIGNAL SQLSTATE '45006' SET MESSAGE_TEXT = 'Berechtigung noch nicht/nicht mehr gueltig' , MYSQL_ERRNO = 1006;
     END IF;
@@ -428,3 +428,5 @@ AS
     AND p.person_person_id = a.person_person_id
     AND a.transponder_id = t.transponder_id
     AND t.transponder_id = k.transponder_id);
+    
+-- tests
