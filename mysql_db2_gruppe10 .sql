@@ -33,7 +33,7 @@ funktionsfaehigkeit BOOLEAN
 );
 
 CREATE TABLE pfoertner(
-pfoertner_person_id INTEGER(9) PRIMARY KEY,
+pfoertner_person_id INTEGER(9) PRIMARY KEY auto_increment,
 nachname VARCHAR (45) NOT NULL,
 vorname VARCHAR (45) NOT NULL,
 geburtsdatum DATE NOT NULL
@@ -48,7 +48,7 @@ geburtsdatum DATE
 );
 
 CREATE TABLE raumverantwortlicher(
-raumverantworlicher_person_id INTEGER (9)  PRIMARY KEY,
+raumverantworlicher_person_id INTEGER (9)  PRIMARY KEY auto_increment,
 nachname VARCHAR (45) NOT NULL,
 vorname VARCHAR (45) NOT NULL,
 geburtsdatum DATE NOT NULL,
@@ -79,7 +79,7 @@ person_id INTEGER(9),
 raum_nr VARCHAR (10) NOT NULL,
 berechtigung_von DATETIME NOT NULL,
 berechtigung_bis DATETIME NOT NULL,
-CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id)
+CONSTRAINT XPKberechtigung PRIMARY KEY (person_id,raumverantwortlicher_id, raum_nr)
 );
 
 CREATE TABLE reservierung(
@@ -273,7 +273,7 @@ BEGIN
 		IF((SELECT gesperrt 
 		FROM berechtigung b, raum r 
         WHERE b.person_id = p_person_id AND r.raum_nr = b.raum_nr AND r.raum_id = p_raum_id) =FALSE) THEN
-			IF (p_reserviert_von>=p_reserviert_bis) THEN 
+			IF (p_reserviert_von<=p_reserviert_bis) THEN 
 				INSERT INTO reservierung (raum_id,person_id,reserviert_von,reserviert_bis) VALUES (p_raum_id, p_person_id, p_reserviert_von, p_reserviert_bis);
 			ELSE 
 				SIGNAL SQLSTATE '45012' SET MESSAGE_TEXT = 'Raum darf nur für positive Zeitspanne reserviert werden', MYSQL_ERRNO = 1012;
@@ -281,7 +281,8 @@ BEGIN
 		ELSE
 			SIGNAL SQLSTATE '45009' SET MESSAGE_TEXT = 'Raum gesperrt', MYSQL_ERRNO = 1009;
         END IF;
-	SIGNAL SQLSTATE '45008' SET MESSAGE_TEXT = 'Fehlende Berechtigung', MYSQL_ERRNO = 1008;
+	ELSE
+		SIGNAL SQLSTATE '45008' SET MESSAGE_TEXT = 'Fehlende Berechtigung', MYSQL_ERRNO = 1008;
 	END IF;
 END $$
 DELIMITER ;
@@ -345,18 +346,16 @@ BEGIN
 		-- CALL proc_raum_reservieren(new.transponder_id, new.person_person_id, new.pfoertner_person_id, new.ausgeliehen_bis - 1);
         SIGNAL SQLSTATE '46003' SET MESSAGE_TEXT = 'Transponder darf nicht für laenger als einen Tag resverviert werden', MYSQL_ERRNO = 1103;
 	END IF;
-    IF EXISTS ( SELECT count(*) FROM reservierung r, kann_oeffnen k WHERE (r.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
+    IF EXISTS ( SELECT * FROM reservierung r, kann_oeffnen k WHERE (r.raum_id = new.raum_id AND (r.reserviert_von < new.reserviert_von AND r.reserviert_bis > new.reserviert_von) 
 				OR (r.reserviert_von < new.reserviert_bis AND r.reserviert_bis > new.reserviert_bis)) ) THEN
 			-- SELECT MAX(r.reserviert_bis) as 'Alternativtermin zur Ausleihe' FROM reservierung r WHERE r.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '46001' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits reserviert', MYSQL_ERRNO = 1101;
-		ELSE IF EXISTS ( SELECT COUNT(*) FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (a.ausgeliehen_von < new.reserviert_von AND a.ausgeliehen_bis > new.reserviert_von) 
+		ELSE IF EXISTS ( SELECT * FROM ausleihe a, kann_oeffnen k WHERE (a.transponder_id = k.transponder_id AND k.raum_id = new.raum_id AND (a.ausgeliehen_von < new.reserviert_von AND a.ausgeliehen_bis > new.reserviert_von) 
 				OR (a.ausgeliehen_von < new.reserviert_bis AND a.ausgeliehen_bis > new.reserviert_bis)) ) THEN
 			-- SELECT MAX(a.ausgeliehen_bis) as 'Alternativtermin zur Ausleihe' FROM ausleihe a WHERE a.transponder_id = new.transponder_id;
 			SIGNAL SQLSTATE '46002' SET MESSAGE_TEXT = 'Transponder in diesem Zeitraum bereits ausgeliehen', MYSQL_ERRNO = 1102;
 		END IF;
     END IF;
-    SIGNAL SQLSTATE '46000'
-      SET MESSAGE_TEXT = 'An error occurred', MYSQL_ERRNO = 1100;
 END $$
 DELIMITER ;
 
@@ -385,10 +384,10 @@ BEGIN
     DECLARE vname VARCHAR(45);
     DECLARE nname VARCHAR(45);
     DECLARE msg varchar(255);
-	SELECT r.raumverantwortlicher_id, r.vorname, r.nachname INTO rid, vname, nname FROM raumverantwortlicher r, labor l WHERE r.labor_id = l.labor_id AND l.labor_id = new.labor_id;
-    SET msg = 'placeholdernotification to ' || rid || ' ' || vname || ' ' || nname;
+	SELECT r.raumverantworlicher_person_id, r.vorname, r.nachname INTO rid, vname, nname FROM raumverantwortlicher r, labor l WHERE r.labor_id = l.labor_id AND l.labor_id = new.labor_id;
+    SET msg = CONCAT('placeholdernotification to ' , rid , ' ' , vname , ' ' , nname);
     -- TODO: notify
-    SIGNAL SQLSTATE '45004' SET MESSAGE_TEXT = msg , MYSQL_ERRNO = 1004;
+    -- SIGNAL SQLSTATE '45004' SET MESSAGE_TEXT = msg , MYSQL_ERRNO = 1004;
 END $$
 DELIMITER ;
 
@@ -430,3 +429,25 @@ AS
     AND t.transponder_id = k.transponder_id);
     
 -- tests
+INSERT INTO labor (labor_name) VALUES ('Irgeneinname');
+INSERT INTO labor (labor_name) VALUES ('Irgeneinname2');
+INSERT INTO person (labor_id,nachname,vorname,geburtsdatum) VALUES (1,'Müller','Max',current_timestamp());
+INSERT INTO person (labor_id,nachname,vorname,geburtsdatum) VALUES (1,'Raumver1','Rolf',current_timestamp());
+INSERT INTO raumverantwortlicher (nachname,vorname,geburtsdatum, labor_id) VALUES ('Raumver1','Rolf',current_timestamp(),1);
+INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1401,1,false);
+INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1402,1,true);
+INSERT INTO raum (raum_nr,labor_id,gesperrt) VALUES (1403,2,false);
+SELECT * FROM raum;
+SELECT * FROM raumverantwortlicher;
+SELECT * FROM person;
+
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1403, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1402, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
+CALL `db2_test`.`proc_add_berechtigung`( 1, 1, 1401, '2020-04-01 10:10:10', '2020-06-01 10:10:10');
+SELECT * FROM berechtigung;
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-04-01 10:10:10');
+CALL `db2_test`.`proc_raum_reservieren`(2,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
+SELECT * FROM reservierung;
+CALL `db2_test`.`proc_raum_reservieren`(1,1, '2020-05-24 11:10:10', '2020-05-24 19:10:10');
+SELECT * FROM reservierung;
