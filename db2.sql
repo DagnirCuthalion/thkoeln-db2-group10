@@ -236,6 +236,18 @@ END;
 SHOW ERRORS;
 
 
+/* Procedure 2 */
+CREATE OR REPLACE PROCEDURE Transponder_zurueckgeben (p_transponder_id INTEGER, p_person_id INTEGER, p_erheblicher_Schaden INTEGER)
+IS
+raumverantwortlicher INTEGER;
+
+BEGIN
+  UPDATE ausleihe SET ausgeliehen_bis = sysdate WHERE transponder_id = p_transponder_id AND person_id = p_person_id;
+END;
+/
+SHOW ERRORS;
+
+
 /*Procedure 3*/
 
 CREATE OR REPLACE PROCEDURE Berechtigen (p_raumverantwortlicher_id INTEGER,p_person_id INTEGER,p_raum_nr INTEGER,p_berechtigung_von DATE,p_berechtigung_bis DATE,p_labor_id INTEGER)
@@ -429,7 +441,7 @@ CREATE OR REPLACE VIEW view_berechtigte
 AS
     SELECT p.person_id , p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id
     FROM berechtigung b, person p, ausleihe a, raumverantwortlicher r, transponder t, kann_oeffnen k
-    WHERE ((r.RAUMVERANTWORTLICHER_ID = 1)
+    WHERE ((r.RAUMVERANTWORTLICHER_ID = 20)
     AND r.RAUMVERANTWORTLICHER_ID = b.raumverantwortlicher_id
     AND b.person_id = p.person_id
     AND p.person_id = a.person_id
@@ -524,6 +536,11 @@ EXECUTE Reservieren (50, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), t
 
 EXECUTE Berechtigen(20,50,3,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
 EXECUTE Berechtigen(20,70,2,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
+
+
+EXECUTE Ausleihen (5, 20, 30, to_date('22.05.2020 08:00', 'DD,MM.YYYY HH24:MI'))
+EXECUTE Transponder_zurueckgeben(4, 20, 0) /* Transponder wird zurueckgegeben */
+EXECUTE Transponder_zurueckgeben(5, 20, 0) /* Transponder wird zurueckgegeben */
 
 
 SELECT * FROM berechtigung;
