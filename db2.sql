@@ -30,19 +30,49 @@ transponder_id NUMBER (9) PRIMARY KEY,
 funktionsfaehigkeit INTEGER
 );
 
-CREATE TABLE pfoertner(
-pfoertner_id NUMBER (9) PRIMARY KEY,
-nachname VARCHAR2 (45) NOT NULL,
-vorname VARCHAR2 (45) NOT NULL,
-geburtsdatum DATE NOT NULL
-);
+DROP TYPE person_typ FORCE;
+-- if created
+CREATE OR REPLACE TYPE person_typ AS OBJECT (
+ person_id           NUMBER,
+ vorname           VARCHAR2(30),
+ nachname          VARCHAR2(20),
+ MAP MEMBER FUNCTION get_idno RETURN NUMBER,
+ MEMBER FUNCTION show RETURN VARCHAR2)
+ NOT FINAL;
+/
+ 
+CREATE OR REPLACE TYPE BODY person_typ AS
+ MAP MEMBER FUNCTION get_idno RETURN NUMBER IS
+ BEGIN
+   RETURN person_id;
+ END;
+-- function that can be overriden by subtypes
+ MEMBER FUNCTION show RETURN VARCHAR2 IS
+ BEGIN
+   RETURN 'Id: '  TO_CHAR(person_id)  ', Name: '  nachname;
+ END;
+ 
+END;
+/
 
-CREATE TABLE person(
-person_id NUMBER (9) PRIMARY KEY,
-nachname VARCHAR2 (45) NOT NULL,
-vorname VARCHAR2 (45) NOT NULL,
-geburtsdatum DATE
-);
+CREATE TABLE person OF person_typ;
+
+CREATE OR REPLACE TYPE pfoertner_typ UNDER person_typ (
+   pfoertner_id NUMBER,
+   major VARCHAR2(30),
+   OVERRIDING MEMBER FUNCTION show RETURN VARCHAR2)
+   NOT FINAL;
+/
+ /*
+CREATE OR REPLACE TYPE BODY pfoertner_typ AS
+ OVERRIDING MEMBER FUNCTION show RETURN VARCHAR2 IS
+ BEGIN
+    RETURN (self AS person_typ).show  ' -- Major: ' || major ;
+ END;
+ 
+END;
+/
+*/
 
 CREATE TABLE raumverantwortlicher(
 raumverantwortlicher_id NUMBER (9) PRIMARY KEY,
@@ -429,7 +459,7 @@ CREATE OR REPLACE VIEW view_berechtigte
 AS
     SELECT p.person_id , p.nachname, p.vorname, a.transponder_id, a.ausgeliehen_von, a.ausgeliehen_bis, k.raum_id
     FROM berechtigung b, person p, ausleihe a, raumverantwortlicher r, transponder t, kann_oeffnen k
-    WHERE ((r.RAUMVERANTWORTLICHER_ID = 1)
+    WHERE ((r.RAUMVERANTWORTLICHER_ID = 20)
     AND r.RAUMVERANTWORTLICHER_ID = b.raumverantwortlicher_id
     AND b.person_id = p.person_id
     AND p.person_id = a.person_id
@@ -525,12 +555,10 @@ EXECUTE Reservieren (50, 4, to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), t
 EXECUTE Berechtigen(20,50,3,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
 EXECUTE Berechtigen(20,70,2,to_date('22.05.2020 09:00', 'DD,MM.YYYY HH24:MI'), to_date('22.05.2020 12:00', 'DD,MM.YYYY HH24:MI'),40) /* Berechtigung erfolgreich vergeben */
 
-
+SELECT * FROM person;
+SELECT * FROM pfoertner;
 SELECT * FROM berechtigung;
-
 SELECT * FROM ausleihe;
 SELECT * FROM Ausleihe_Archiv;
-
 SELECT * FROM reservierung;
-
 SELECT * FROM view_berechtigte;
