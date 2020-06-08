@@ -1,0 +1,24 @@
+{
+  "name": "nodemysql",
+  "version": "1.0.0",
+  "description": "App for DB2",
+  "main": "db2app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "bootstrap": "^4.5.0",
+    "dateformat": "^3.0.3",
+    "ejs": "^3.1.3",
+    "epress": "0.0.1-security",
+    "express": "^4.17.1",
+    "express-partials": "^0.3.0",
+    "jquery": "^3.5.1",
+    "mysql": "^2.18.1",
+    "tether": "^1.4.7"
+  },
+  "devDependencies": {}
+}
