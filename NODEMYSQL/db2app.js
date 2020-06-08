@@ -97,3 +97,38 @@ app.get('/person',(req,res)=>{
         });
     })
 });
+
+//Show Labore
+app.get('/labor',(req,res)=>{
+
+    db.query("SELECT * FROM labor", (err,result)=>{
+        res.render('pages/index',{
+            siteTitle : siteTitle,
+            pageTitle: "Labor List",
+            items : result 
+        });
+    })
+});
+
+//Insert sample data
+//Post Labor
+app.post('/labor/add',(req,res)=>{
+
+    var query =     "INSERT INTO `labor` (labor_id,labor_name) VALUES ("
+        query +=    " '"+req.body.labor_id+"',";
+        query +=    " '"+req.body.labor_name+"')";
+    
+    db.query(query,(err,result)=>{
+        res.redirect("/labor");
+    });
+});
+
+//Update Labor
+app.get('/updatelabor/:id',(req,res)=>{
+    let sql = `UPDATE labor SET labor_id = '${req.body.labor_id}', labor_name = '${req.body.labor_name}' WHERE labor_id = ${req.params.id}`;
+    let query = db.query(sql, (err,result)=>{
+        if(err)throw err;
+        console.log(result);
+        res.send('Labor updated..');
+    });
+});
