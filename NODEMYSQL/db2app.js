@@ -110,6 +110,16 @@ app.get('/labor',(req,res)=>{
     })
 });
 
+//Add Labor
+app.get('/labor/add',(req,res)=>{
+
+    res.render('pages/add-event.ejs',{
+        siteTitle : siteTitle,
+        pageTitle: "Add Labor",
+        items : '' 
+    });
+});
+
 //Insert sample data
 //Post Labor
 app.post('/labor/add',(req,res)=>{
