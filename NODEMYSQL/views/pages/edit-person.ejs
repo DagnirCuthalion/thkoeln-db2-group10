@@ -1,0 +1,50 @@
+<%- include ("../partials/header") %>
+<br>
+<form action="http://localhost:3000/person/edit/<%= item.[0].person_person_id %>" method="post"
+class="col s12"></form>
+
+        <div class="form-group row">
+            <label for="person_person_id" class="col-2 col-form-label">Person ID</label>
+            <div class="col-10">
+                <input type="number" name="person_person_id" value="%= item.[0].person_person_id %>" class="form-control">
+            </div>
+        </div>
+    
+        <div class="form-group row">
+            <label for="labor_id" class="col-2 col-form-label">Labor ID</label>
+            <div class="col-10">
+                <input type="number" name="labor_id" value="%= item.[0].labor_id %>" class="form-control">
+            </div>
+        </div>
+    
+        <div class="form-group row">
+            <label for="nachname" class="col-2 col-form-label">Nachname</label>
+            <div class="col-10">
+                <input type="text" name="nachname" value="%= item.[0].nachname %>" class="form-control">
+            </div>
+        </div>
+    
+        <div class="form-group row">
+            <label for="vorname" class="col-2 col-form-label">Vorname</label>
+            <div class="col-10">
+                <input type="text" name="vorname" value="%= item.[0].vorname %>" class="form-control">
+            </div>
+        </div>
+    
+        <div class="form-group row">
+            <label for="geburtsdatum" class="col-2 col-form-label">Geburtsdatum</label>
+            <div class="col-10">
+                <input type="date" name="geburtsdatum" value="%= item.[0].geburtsdatum %>" class="form-control">
+            </div>
+        </div>
+    
+        <div class="form-group row">
+            <label for="e_location" class="col-2 col-form-label" style="color:#ffffff">Click
+            here to submit</label>
+            <div class="col-10">
+                <input type="submit" name="submit" value="Save Person" class="btn btn-primary btn-lg">
+            </div>
+        </div>
+    </form>
+
+<%- include ("../partials/footer") %>

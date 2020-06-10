@@ -75,13 +75,18 @@ app.post('/person/add',(req,res)=>{
 
 
 //Update Person
-app.get('/updatepersonname/:id',(req,res)=>{
-    let newVorname = 'ingo';
-    let sql = `UPDATE person SET vorname = '${newVorname}' WHERE person_person_id = ${req.params.id}`;
-    let query = db.query(sql, (err,result)=>{
+app.get('/person/edit',(req,res)=>{
+
+    db.query("SELECT * FROM person WHERE person_person_id = '"+ req.params.person_person_id + "'", (err,res)=>{
+
+        res.render('pages/edit-person',{
+            siteTitle : siteTitle,
+            pageTitle : "Editing Person : " + result[0].vorname + result[0].nachname,
+            item : result
+        });
+
         if(err)throw err;
         console.log(result);
-        res.send('Labor updated..');
     });
 });
 
