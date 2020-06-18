@@ -11,6 +11,7 @@ DELETE FROM ausleihe;
 DELETE FROM schadensmeldung;
 DELETE FROM labor;
 
+INSERT INTO labor (labor_id,labor_name) VALUES (0,'geheimes kakteen lab');
 INSERT INTO labor (labor_name) VALUES ('Irgeneinname');
 INSERT INTO labor (labor_name) VALUES ('Irgeneinname2');
 COMMIT;

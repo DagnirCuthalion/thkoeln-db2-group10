@@ -107,7 +107,7 @@ app.get('/person', (req, res) => {
 //Show Labore
 app.get('/labor', (req, res) => {
     console.log('getting labor');
-    var dynIn = generateDynIn('labor', '').then(dynIn => {
+    var dynIn = generateDynIn('labor', '/dynamic').then(dynIn => {
         db.query("SELECT * FROM labor", (err, result) => {
             res.render('pages/get-dynamic.ejs', {
                 siteTitle: siteTitle,
@@ -128,21 +128,45 @@ app.post('/labor/add', (req, res) => {
     query += " '" + req.body.labor_name + "')";
     //console.log('post laboradd query: ' + query);
     db.query(query, (err, result) => {
+        if (err) res.send(err);
         res.redirect("/labor");
     });
 });
 
+app.get('/labor/edit/:id', (req, res) => {
+    id = req.params.id - 1;
+    dynIn = generateDynIn('labor', "http://localhost:3000/labor/update/" + id).then(dynIn => {
+        //console.log(dynIn);
+        //console.log(dynIn.tablename);
+        res.render('pages/update-form-dynamic', {
+            siteTitle: siteTitle,
+            pageTitle: "hardcoded_Page Title",
+            dynIn,
+            id
+        });
+    });
+})
 //Update Labor
-app.get('/updatelabor/:id', (req, res) => {
+app.post('/labor/update/:id', (req, res) => {
+    console.log('id of url: ' + req.params.id);
+    req.params.id = (parseInt(req.params.id)+1).toString();
+    console.log('id of url before update: ' + req.params.id);
     let sql = `UPDATE labor SET labor_id = '${req.body.labor_id}', labor_name = '${req.body.labor_name}' WHERE labor_id = ${req.params.id}`;
     let query = db.query(sql, (err, result) => {
-        if (err) throw err;
-        console.log(result);
-        res.send('Labor updated..');
+        if (err) res.send(err);
+        console.log('result of updatequery: ' + result);
+        res.redirect('/labor');
     });
 });
 
-
+app.get('/labor/delete/:id', (req, res) => {
+    let sql = `DELETE FROM labor WHERE labor_id = ${req.params.id}`;
+    let query = db.query(sql, (err, result) => {
+        if (err) res.send(err);
+        console.log('result of deletequery: ' + result);
+        res.redirect('/labor');
+    });
+})
 
 app.get('/test', (req, res) => {
     res.render('pages/test', {
@@ -162,22 +186,23 @@ class DynamicInput {
 }
 
 app.post('/dynamic', (req, res) => {
+    console.log('starting dynamic');
     var action = req.body.action
     if (typeof (action) == 'undefined') {
         console.log('>>req.body.action was not defined!! used standard<<')
-        action = "http://localhost:3000/" + req.body.tablename + '/add';
+        action = "http://localhost:3000/dynamic/add";
     }
     console.log('action: ' + action);
     var dynIn = generateDynIn(req.body.tablename, action).then(dynIn => {
 
         //console.log('hoping for dynin');
-        //console.log('dynintype: ' + typeof (dynIn));
-        //console.log('postdynamic tablename: ' + req.body.tablename);
+        console.log('dynintype: ' + typeof (dynIn));
+        console.log('postdynamic tablename: ' + req.body.tablename);
         //console.log('action: ' + action);
         //dynIn.arr[1].forEach(function (e) { console.log(e) });
 
 
-        //console.log('dynIn.arr:')
+        console.log('dynIn.arr[0]: '+dynIn.arr[0])
         //dynIn.arr.forEach(function(e){console.log('e: '+e)});
         //console.log('action: ' + dynIn.action);
 
@@ -186,7 +211,7 @@ app.post('/dynamic', (req, res) => {
             siteTitle: siteTitle,
             pageTitle: "hardcoded_Page Title",
             dynIn
-        });
+        });r
     });
 });
 
@@ -201,18 +226,47 @@ app.get('/', (req, res) => {
 })
 
 app.post('/dynamic/add', (req, res) => {
+    console.log('starting dynamicadd');
+    //console.log('tabname : '+req.body.tablename);
+    if(req.body.geburtsdatum)
+    {
+        req.body.geburtsdatum = new Date(req.body.geburtsdatum);
+        //console.log(req.body.geburtsdatum);
+    }
+    dynIn = generateDynIn(req.body.tablename, "http://localhost:3000/" + req.body.tablename);
+    var query = "INSERT INTO "+req.body.tablename +" (";
+    //console.log('query tabname: '+query);
+    //console.log(req.body);
+    var keyArray = Object.keys(JSON.parse(JSON.stringify(req.body)));
+    keyArray.pop();
+    keyArray.forEach(function (k) {
+        //console.log('key: '+k);
+        query += k + ','
+        //console.log('query in first for: '+query);
+    });
+/*
 
-    var query = "INSERT INTO `<% req.body.tablename %>` (";
-    console.log(req.body);
-    //query -= ','
-
+    dynIn.arr[0].forEach(row =>
+        {
+            query += row.name + ',';
+        })
+*/
+    query = query.slice(0,-1);
+    //console.log('query fieldnames: '+query);
     query += ") VALUES (";
-
-    //query -= ',';
+    var valueArray = Object.values(JSON.parse(JSON.stringify(req.body)));
+    valueArray.pop();
+    valueArray.forEach(function (v) {
+        query += '"'+v+'"' + ',';
+    })
+    query = query.slice(0,-1);
+    //console.log('query values: '+query);
     query += ")";
-
+    //console.log('finished insertquery: '+query);
     db.query(query, (err, result) => {
-        res.redirect("/");
+        if(err) res.send(err);
+        res.redirect("/"+req.body.tablename);
+        //console.log('redirected from dynadd')
     });
 });
 
@@ -221,8 +275,10 @@ function sleep(ms) {
 }
 
 async function generateDynIn(tablename, action) {
+    console.log('starting gendynin');
     var dynIn;
     db.query("SELECT * FROM " + tablename, (err, result) => {
+        if (err) throw err;
         //console.log('result: ' + result);
         //console.log('err: ' + err);
         var resultArray = Object.values(JSON.parse(JSON.stringify(result)));
@@ -254,7 +310,7 @@ async function generateDynIn(tablename, action) {
         //console.log('query dynin tabname: ' + dynIn.tablename);
     });
     //console.log('going to sleep');
-    await sleep(3000);
+    await sleep(50);
     //console.log('waking up');
     //console.log('function dynin tabname: ' + dynIn.tablename);
     return dynIn
