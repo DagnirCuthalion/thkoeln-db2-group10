@@ -31,7 +31,7 @@ const siteTitle = "DB2-App";
 const baseURL = "http://localhost:3000/"
 
 
-//Connect
+//Connect with mysldb
 db.connect((err) => {
     if (err) {
         throw err;
@@ -39,14 +39,13 @@ db.connect((err) => {
     console.log('MySql Connected..');
 });
 
-
-
+//listen for connection (per browser)
 app.listen('3000', () => {
     console.log('Server started on port 3000');
 });
 
 //Get Person
-
+//that comment makes no sense - i might have destroyed something here... anyway, propably not needed anymore, dynamicadd does this
 app.get('/person/add', (req, res) => {
 
     res.render('pages/add-event.ejs', {
@@ -59,7 +58,7 @@ app.get('/person/add', (req, res) => {
 
 
 //Insert sample data
-//Post Person
+//Post Person, propably not needed anymore, dynamicadd does this
 app.post('/person/add', (req, res) => {
 
     var query = "INSERT INTO `person` (person_person_id,labor_id,nachname,vorname,geburtsdatum) VALUES ("
@@ -92,7 +91,7 @@ app.get('/person/edit', (req, res) => {
 });
 
 
-//Show Persons
+//Show Persons, propably not needed anymore, getdynamic does this
 app.get('/person', (req, res) => {
 
     db.query("SELECT * FROM person", (err, result) => {
@@ -104,7 +103,7 @@ app.get('/person', (req, res) => {
     })
 });
 
-//Show Labore
+//Show Labore, propably not needed anymore, getdynamic does this
 app.get('/labor', (req, res) => {
     console.log('getting labor');
     var dynIn = generateDynIn('labor', '/dynamic').then(dynIn => {
@@ -119,8 +118,8 @@ app.get('/labor', (req, res) => {
     });
 });
 
-//Insert sample data
 //Post Labor
+//propably not needed anymore, dynamicadd does this
 app.post('/labor/add', (req, res) => {
     //console.log('posting laboradd');
     var query = "INSERT INTO `labor` (labor_id,labor_name) VALUES ("
@@ -133,8 +132,9 @@ app.post('/labor/add', (req, res) => {
     });
 });
 
+//generate form for updating
 app.get('/labor/edit/:id', (req, res) => {
-    id = req.params.id - 1;
+    id = req.params.id - 1; //autoincrement starts with 1, array with 0, hence the subtraction
     dynIn = generateDynIn('labor', "http://localhost:3000/labor/update/" + id).then(dynIn => {
         //console.log(dynIn);
         //console.log(dynIn.tablename);
@@ -159,6 +159,7 @@ app.post('/labor/update/:id', (req, res) => {
     });
 });
 
+//deleting labor by param id
 app.get('/labor/delete/:id', (req, res) => {
     let sql = `DELETE FROM labor WHERE labor_id = ${req.params.id}`;
     let query = db.query(sql, (err, result) => {
@@ -168,6 +169,7 @@ app.get('/labor/delete/:id', (req, res) => {
     });
 })
 
+//starting point for dynamic stuff, placeholder
 app.get('/test', (req, res) => {
     res.render('pages/test', {
         siteTitle: siteTitle,
@@ -175,7 +177,7 @@ app.get('/test', (req, res) => {
     });
 });
 
-
+//class containing all data needed for th dynamic pages
 class DynamicInput {
 
     constructor(arr, tablename, action) {
@@ -185,6 +187,7 @@ class DynamicInput {
     }
 }
 
+//generate add form for table passed in body.tablename
 app.post('/dynamic', (req, res) => {
     console.log('starting dynamic');
     var action = req.body.action
@@ -215,7 +218,7 @@ app.post('/dynamic', (req, res) => {
     });
 });
 
-
+//this shall be the main page, empty for now
 app.get('/', (req, res) => {
     res.render('pages/main',
         {
@@ -225,77 +228,74 @@ app.get('/', (req, res) => {
     )
 })
 
+//performing insert query based on passed form data
 app.post('/dynamic/add', (req, res) => {
     console.log('starting dynamicadd');
     //console.log('tabname : '+req.body.tablename);
-    if(req.body.geburtsdatum)
+    
+    if(req.body.geburtsdatum) //date passed as string isnt accepted by mysql, so we need to pass a Date
     {
         req.body.geburtsdatum = new Date(req.body.geburtsdatum);
         //console.log(req.body.geburtsdatum);
     }
-    dynIn = generateDynIn(req.body.tablename, "http://localhost:3000/" + req.body.tablename);
-    var query = "INSERT INTO "+req.body.tablename +" (";
+    dynIn = generateDynIn(req.body.tablename, "http://localhost:3000/" + req.body.tablename); //we expect a tablename in body, redirecting to the get page of the table after executing the add. todo: redirect to dynamic get 
+    var query = "INSERT INTO "+req.body.tablename +" ("; //starting to build a insert query on the passed table
     //console.log('query tabname: '+query);
     //console.log(req.body);
-    var keyArray = Object.keys(JSON.parse(JSON.stringify(req.body)));
-    keyArray.pop();
+    var keyArray = Object.keys(JSON.parse(JSON.stringify(req.body))); //need something iterable, so we get the keys of the body into a array
+    keyArray.pop(); //it contains a tablename which we do not want to be inserted
     keyArray.forEach(function (k) {
         //console.log('key: '+k);
-        query += k + ','
+        query += k + ',' //looping through the remaining keys we add those to our columns in the query
         //console.log('query in first for: '+query);
     });
-/*
-
-    dynIn.arr[0].forEach(row =>
-        {
-            query += row.name + ',';
-        })
-*/
-    query = query.slice(0,-1);
+    query = query.slice(0,-1); //we do not want the last ',' so we slice it off
     //console.log('query fieldnames: '+query);
-    query += ") VALUES (";
-    var valueArray = Object.values(JSON.parse(JSON.stringify(req.body)));
-    valueArray.pop();
+    query += ") VALUES ("; //next come the values
+    var valueArray = Object.values(JSON.parse(JSON.stringify(req.body))); //iterable array of the values of the last form
+    valueArray.pop(); //dont want hte tablename here either
     valueArray.forEach(function (v) {
-        query += '"'+v+'"' + ',';
+        query += '"'+v+'"' + ','; //need to pass strings in " " to let mysql accept them
     })
-    query = query.slice(0,-1);
+    query = query.slice(0,-1); //we do not want the last ',' so we slice it off
     //console.log('query values: '+query);
-    query += ")";
+    query += ")"; //wohoo, query is finished
     //console.log('finished insertquery: '+query);
-    db.query(query, (err, result) => {
-        if(err) res.send(err);
-        res.redirect("/"+req.body.tablename);
+    db.query(query, (err, result) => { //executing query
+        if(err) res.send(err); //errors are displayed in browser
+        res.redirect("/"+req.body.tablename); //if no error we go back to the get page of the table
         //console.log('redirected from dynadd')
     });
 });
 
+//needed for db calls in functions
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+//returns data for passed table in an instance of DynamicInput
 async function generateDynIn(tablename, action) {
     console.log('starting gendynin');
-    var dynIn;
-    db.query("SELECT * FROM " + tablename, (err, result) => {
-        if (err) throw err;
+    var dynIn; //this is what we want to return
+    db.query("SELECT * FROM " + tablename, (err, result) => { //getting all data from the specified table
+        if (err) throw err; //errors are shown in console
         //console.log('result: ' + result);
         //console.log('err: ' + err);
-        var resultArray = Object.values(JSON.parse(JSON.stringify(result)));
+        var resultArray = Object.values(JSON.parse(JSON.stringify(result))); //as above we need something iterable, so we convert the selected
         //console.log('resArr: ' + resultArray);
-        var numberOfAttributes;
-        if (typeof (resultArray[1]) == 'undefined')
-            numberOfAttributes = 0;
+        var numberOfAttributes; //how long does the inner array need to be
+        if (typeof (resultArray[1]) == 'undefined') //if table is empty
+            numberOfAttributes = 0; //we need no inner array
         else
-            numberOfAttributes = resultArray[1].size;
-        dynIn = new DynamicInput(Array(resultArray.size), tablename, action);
+            numberOfAttributes = resultArray[1].size; //else we need it to be of the size equal to the n of columns
+        dynIn = new DynamicInput(Array(resultArray.size), tablename, action); //we initialize dynIn with an Array big enough to fit all rows and the params of this function
         //console.log('initialized dynin tabname: ' + dynIn.tablename);
         var j = 0;
         resultArray.forEach(function (v) {
-            var values = Array(numberOfAttributes);
+            var values = Array(numberOfAttributes); 
             //console.log('v: ' + v);
             i = 0;
-            for (var key in v) {
+            for (var key in v) { //for each columnname
                 //console.log('v.key: ' + key);
                 if (Object.prototype.hasOwnProperty.call(v, key)) {
                     var val = v[key];

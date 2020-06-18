@@ -22,22 +22,22 @@
                 <thead>
                     <tr>
                         <th style="width:1%;text-align:center">Nummer</th>
-                        <% for (var row of dynIn.arr[0]) { %>
-                        <th style="width:5%;text-align:center"><%= row.name %></th>
+                        <% for (var col of dynIn.arr[0]) { %>
+                        <th style="width:5%;text-align:center"><%= col.name %></th>
                         <%}%>
                         <th solspan="2" style="width:20%;text-align:center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <% dynIn.arr.forEach(function(item, index){ %>
+                    <% dynIn.arr.forEach(function(row, index){ %>
                 <tr>
                     <td style="width:1%;text-align:center"><%= index +1 %></td>
-                    <% for (var row of item) { %>
-                    <td style="width:5%"><%= row.value %></td>
+                    <% for (var col of row) { %>
+                    <td style="width:5%"><%= col.value %></td>
                     <%}%>
                     <td solspan="2" style="width:20%;text-align:center">
-                        <a href="/<%= dynIn.tablename%>/edit/<%=item[0].value%>" class="btn btn-success">Edit</a>
-                        <a href="/<%= dynIn.tablename%>/delete/<%=item[0].value%>" class="btn btn-danger">Delete</a>
+                        <a href="/<%= dynIn.tablename%>/edit/<%=row[0].value%>" class="btn btn-success">Edit</a>
+                        <a href="/<%= dynIn.tablename%>/delete/<%=row[0].value%>" class="btn btn-danger">Delete</a>
                     </td>
                 </tr>
                 <% }); %>
