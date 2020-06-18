@@ -2,7 +2,7 @@
 
 <div class="row" style="margin-left: 5px;margin-right:5px">
     <form action = "<%=dynIn.action%>" method="post" class="col s12">
-        <% for (var row of dynIn.arr) { %>
+        <% for (var row of dynIn.arr[1]) { %>
         <div class="form-group row">
             <label for="<%= row.name %>" class="col-2 col-form-label"><%= row.name %></label>
             <div class="col-10">
