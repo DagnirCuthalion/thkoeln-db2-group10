@@ -31,7 +31,7 @@ const siteTitle = "DB2-App";
 const baseURL = "http://localhost:3000/"
 
 
-//Connect with mysldb
+//Connect with mysqldb
 db.connect((err) => {
     if (err) {
         throw err;
@@ -169,6 +169,61 @@ app.get('/labor/delete/:id', (req, res) => {
     });
 })
 
+app.get('/berechtigen', (req,res) =>
+{
+    console.log('starting berechtigen')
+    res.render('pages/berechtigen_proc_form.ejs', {
+        siteTitle: siteTitle,
+        pageTitle: "hardcoded_Page Title",
+    });
+})
+
+app.get('/berechtigung/delete/:id', (req, res) => {
+    let sql = `DELETE FROM berechtigung WHERE person_id = ${req.params.id}`;
+    let query = db.query(sql, (err, result) => {
+        if (err) res.send(err);
+        console.log('result of deletequery: ' + result);
+        res.redirect('/dynamic/get/berechtigung');
+    });
+})
+
+app.post('/berechtigen_proc', (req,res) =>
+{
+    console.log('starting berechtigen_proc')
+    v = new Date(req.body.berechtigt_von);
+    req.body.berechtigt_von = v.getFullYear()+'-0'+v.getMonth()+'-0'+v.getDay()+' 0'+v.getHours()+':0'+v.getMinutes()+':0'+v.getSeconds()
+    v = new Date(req.body.berechtigt_bis); //let's just hope those exist, i'm lazy
+    req.body.berechtigt_bis = v.getFullYear()+'-0'+v.getMonth()+'-0'+v.getDay()+' 0'+v.getHours()+':0'+v.getMinutes()+':0'+v.getSeconds()
+    var query = "CALL `db2_test`.`proc_add_berechtigung`("; //starting to build a procedure call query
+    //console.log('query tabname: '+query);
+    //console.log(req.body);
+    var valueArray = Object.values(JSON.parse(JSON.stringify(req.body))); //iterable array of the values of the last form
+    valueArray.pop() //no need for tablename
+    valueArray.forEach(function (v) {
+        if(v.length==24)
+        {
+            //console.log(v)
+            //v= v.getFullYear()+'-'+v.getMonth()+'-'+v.getDay()+' '+v.getHours()+':'+v.getMinutes()+':'+v.getSeconds()
+            console.log(v)
+            query += "'"+v +"'"+ ',';
+        }
+        else
+            query += "'"+v+"'" + ','; //need to pass strings in " " to let mysql accept them
+        //console.log(v.length)
+        
+    })
+    query = query.slice(0,-1); //we do not want the last ',' so we slice it off
+    query += ")"; //wohoo, query is finished
+    console.log('finished query: '+query);
+    db.query(query, (err, result) => { //executing query
+        if(err) res.send(err); //errors are displayed in browser
+        res.body = {tablename:'berechtigung'}
+        console.log('set res body')
+        console.log('redirecting to dynamicget')
+        res.redirect("/dynamic/get/berechtigung"); //if no error we go back to the get page of the table
+    });
+})
+
 //starting point for dynamic stuff, placeholder
 app.get('/test', (req, res) => {
     res.render('pages/test', {
@@ -188,8 +243,10 @@ class DynamicInput {
 }
 
 //generate add form for table passed in body.tablename
-app.post('/dynamic', (req, res) => {
+app.all('/dynamic', (req, res) => {
     console.log('starting dynamic');
+    if(typeof(req.body.tablename)=='undefined')
+        req.body.tablename="berechtigung" //just for getting it to work during the 3.ms
     var action = req.body.action
     if (typeof (action) == 'undefined') {
         console.log('>>req.body.action was not defined!! used standard<<')
@@ -214,7 +271,7 @@ app.post('/dynamic', (req, res) => {
             siteTitle: siteTitle,
             pageTitle: "hardcoded_Page Title",
             dynIn
-        });r
+        });
     });
 });
 
@@ -267,6 +324,22 @@ app.post('/dynamic/add', (req, res) => {
         //console.log('redirected from dynadd')
     });
 });
+
+app.get('/dynamic/get/:id', (req,res) =>
+{
+    console.log('getting dynamic');
+    console.log('id: '+req.params.id)
+    var dynIn = generateDynIn(req.params.id, '/dynamic').then(dynIn => {
+        db.query("SELECT * FROM "+dynIn.tablename, (err, result) => {
+            res.render('pages/get-dynamic.ejs', {
+                siteTitle: siteTitle,
+                pageTitle: "Table List",
+                dynIn
+            });
+            //console.log(result);
+        })
+    });
+})
 
 //needed for db calls in functions
 function sleep(ms) {
